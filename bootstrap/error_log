@@ -1,0 +1,20 @@
+[02-Sep-2024 12:05:35 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Foundation\Application" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php on line 14
+[02-Sep-2024 12:06:34 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Foundation\Application" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php on line 14
+[02-Sep-2024 12:07:11 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Foundation\Application" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php on line 14
+[02-Sep-2024 12:07:26 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Foundation\Application" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php on line 14
+[02-Sep-2024 12:07:38 UTC] PHP Fatal error:  Uncaught Error: Class "Illuminate\Foundation\Application" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php:14
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/bootstrap/app.php on line 14

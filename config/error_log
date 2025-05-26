@@ -1,0 +1,8 @@
+[04-Mar-2025 23:25:46 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function env() in /home/eurekacom/public_html/wifi.eureka-communication.com/config/database.php:18
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/config/database.php on line 18
+[06-Mar-2025 08:01:42 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function env() in /home/eurekacom/public_html/wifi.eureka-communication.com/config/database.php:18
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/config/database.php on line 18

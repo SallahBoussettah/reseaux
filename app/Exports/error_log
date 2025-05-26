@@ -1,0 +1,16 @@
+[02-Sep-2024 13:05:48 UTC] PHP Fatal error:  Uncaught Error: Interface "Maatwebsite\Excel\Concerns\FromCollection" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php:10
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php on line 10
+[02-Sep-2024 13:07:07 UTC] PHP Fatal error:  Uncaught Error: Interface "Maatwebsite\Excel\Concerns\FromCollection" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php:10
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php on line 10
+[02-Sep-2024 13:09:20 UTC] PHP Fatal error:  Uncaught Error: Interface "Maatwebsite\Excel\Concerns\FromCollection" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php:10
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php on line 10
+[02-Sep-2024 13:09:29 UTC] PHP Fatal error:  Uncaught Error: Interface "Maatwebsite\Excel\Concerns\FromCollection" not found in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php:10
+Stack trace:
+#0 {main}
+  thrown in /home/eurekacom/public_html/wifi.eureka-communication.com/app/Exports/ClientsExport.php on line 10
