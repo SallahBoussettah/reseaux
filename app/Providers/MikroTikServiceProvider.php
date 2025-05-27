@@ -14,7 +14,7 @@ class MikroTikServiceProvider extends ServiceProvider
             $config = new Config([
                 'host' => env('MIKROTIK_HOST','eurekadigital.ddns.net'),
                 'user' => env('MIKROTIK_USER','api'),
-                'pass' => env('MIKROTIK_PASSWORD', 'Erekapp314'),
+                'pass' => env('MIKROTIK_PASS', 'Erekapp314'),
                 'port' => (int) env('MIKROTIK_PORT', 8728),
                 'timeout' => 30,
             ]);

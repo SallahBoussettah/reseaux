@@ -11,14 +11,38 @@ class Client extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory, Notifiable;
 
-    protected $fillable = ['full_name', 'email', 'gender', 'mac_address', 'device_type', 'platform', 'premium_expires_at', 'status', 'last_login_at', 'login_count', 'created_at', 'updated_at', 'language', 'data_usage', 'email_verified_at', 'remember_token'];
+    protected $fillable = [
+        'full_name', 
+        'email', 
+        'gender', 
+        'mac_address', 
+        'device_type', 
+        'platform', 
+        'premium_expires_at', 
+        'status', 
+        'last_login_at', 
+        'login_count', 
+        'created_at', 
+        'updated_at', 
+        'language', 
+        'data_usage', 
+        'email_verified_at', 
+        'remember_token',
+        'verification_token',
+        'verification_token_expires_at',
+        'verification_token_attempts'
+    ];
 
 
     //protected $hidden = ['remember_token'];
 
-    protected $dates = ['premium_expires_at'];
+    protected $dates = [
+        'premium_expires_at',
+        'verification_token_expires_at'
+    ];
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'verification_token_expires_at' => 'datetime',
     ];
 }

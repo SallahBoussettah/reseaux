@@ -12,14 +12,21 @@ use Illuminate\Http\Request;
 Route::get('/wifi', [ClientController::class, 'index']);
 Route::post('/wifi', [ClientController::class, 'store'])->name('wifiaccess');
 
-
+// Token verification routes
+Route::get('/token/verify', [ClientController::class, 'showTokenVerification'])->name('token.verification');
+Route::post('/token/verify', [ClientController::class, 'verifyToken'])->name('verify.token');
+Route::get('/token/check', [ClientController::class, 'checkToken'])->name('check.token');
 
 Route::get('/finale', [ClientController::class, 'finale'])->name('verification.page');
 
-
-
+// MikroTik API routes
 Route::get('/mikrotik/test', [MikroTikController::class, 'testConnection']);
 Route::get('/mikrotik/addresses', [MikroTikController::class, 'getAddresses']);
+Route::get('/mikrotik/profiles', [MikroTikController::class, 'getHotspotProfiles']);
+Route::get('/mikrotik/users', [MikroTikController::class, 'getHotspotUsers']);
+Route::get('/mikrotik/create-test-users', [MikroTikController::class, 'createTestUsers']);
+Route::get('/mikrotik/check-profiles', [MikroTikController::class, 'checkAndCreateProfiles']);
+Route::get('/mikrotik/cleanup-users', [MikroTikController::class, 'cleanupDuplicateUsers']);
 
 Route::get('/verification/success', function () {
     return view('verification_success');

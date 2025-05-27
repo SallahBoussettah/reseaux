@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-class CreateSettingsTable extends Migration
+class CreateSettingsTable20240829 extends Migration
 {
     /**
      * Run the migrations.
@@ -17,7 +17,7 @@ class CreateSettingsTable extends Migration
             $table->id();
             $table->string('key')->unique();
             $table->text('value')->nullable();
-            $table->string('group')->nullable();
+            $table->string('group')->default('general');
             $table->string('type')->default('text');
             $table->text('options')->nullable();
             $table->string('label')->nullable();

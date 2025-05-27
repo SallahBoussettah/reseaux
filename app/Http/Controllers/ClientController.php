@@ -47,7 +47,6 @@ class ClientController extends Controller
 
     public function store(Request $request)
     {
-
         $validatedData = $request->validate([
             'full_name' => 'required|string|max:255',
             'email' => 'required|email|unique:clients',
@@ -55,13 +54,15 @@ class ClientController extends Controller
             'gender' => 'required|in:male,female,other'
         ]);
 
-
         $mac_address = $request->input('mac');
         
         $validatedData['mac_address'] = $mac_address;
 
-        // Generate token
-        $token = bin2hex(random_bytes(16));
+        // Generate a 6-digit verification token
+        $verificationToken = mt_rand(100000, 999999);
+        
+        // Set token expiration to 15 minutes from now
+        $tokenExpiration = now()->addMinutes(15);
 
         $acceptLanguage = $request->server('HTTP_ACCEPT_LANGUAGE');
         $language = explode(',', $acceptLanguage)[0];
@@ -70,7 +71,7 @@ class ClientController extends Controller
 
         $validatedData['language'] = $language;
 
-                // Initialize the Agent class
+        // Initialize the Agent class
         $agent = new Agent();
         
         // Detect device type
@@ -89,71 +90,79 @@ class ClientController extends Controller
             $deviceType = 'Tablet';
         }
         
-
         // Store device type
         $validatedData['device_type'] = $deviceType;
         $validatedData['platform'] = $agent->platform();
         $validatedData['browser'] = $agent->browser();
         $validatedData['last_login_at'] = Carbon::now()->toDateTimeString();
 
-        // Store the client in the database with the token
-        $clients = Client::create(array_merge($validatedData, ['remember_token' => $token, 'verified' => false]));
+        // Add verification token data
+        $userData = array_merge($validatedData, [
+            'verification_token' => (string)$verificationToken, // Explicitly cast to string
+            'verification_token_expires_at' => $tokenExpiration,
+            'verification_token_attempts' => 0,
+            'verified' => false
+        ]);
         
+        // Log the data being saved
+        \Log::info('Creating client with data:', [
+            'verification_token' => $userData['verification_token'],
+            'expires_at' => $userData['verification_token_expires_at']
+        ]);
 
-        // Send verification email
-        $verificationLink = "https://wifi.eureka-communication.com/public/email/verify?token=$token";
+        // Store the client in the database with the verification token
+        $clients = Client::create($userData);
         
+        // Verify the token was saved
+        $savedClient = Client::find($clients->id);
+        \Log::info('Saved client verification data:', [
+            'id' => $savedClient->id,
+            'verification_token' => $savedClient->verification_token,
+            'expires_at' => $savedClient->verification_token_expires_at
+        ]);
+        
+        // Send verification email with token
         try {
-            Mail::send('emails.verification', ['verificationLink' => $verificationLink], function ($message) use ($validatedData) {
+            $verificationUrl = route('token.verification');
+            Mail::send('emails.token_verification', [
+                'verificationToken' => $verificationToken,
+                'verificationUrl' => $verificationUrl
+            ], function ($message) use ($validatedData) {
                 $message->to($validatedData['email'])
-                    ->subject('Vérifiez votre adresse e-mail')
+                    ->subject('Votre code de vérification WiFi')
                     ->from('wifi@eureka-communication.com');
             });
             
             // Log successful email sending attempt
-            \Log::info('Verification email sent to: ' . $validatedData['email'] . ' with token: ' . $token);
+            \Log::info('Verification token sent to: ' . $validatedData['email'] . ' with token: ' . $verificationToken);
+            
+            // Add a success message
+            session()->flash('status', 'Verification code has been sent to your email. Please check your inbox.');
             
         } catch (\Exception $e) {
             // Log email sending error
             \Log::error('Failed to send verification email: ' . $e->getMessage());
+            session()->flash('error', 'Failed to send verification email. Please try again.');
         }
 
-
-        
-
-
-        /*$client_ip = $request->ip();
-
-        $profile = 'free_user';*/
         try {
             // Add user to MikroTik hotspot with free profile
             $this->mikroTikService->addHotspotUser($clients->email, $mac_address, 'free_user');
 
-           /* $client = new RouterOSAPI([
-                'host' => '192.168.88.1',
-                'user' => 'api',
-                'pass' => 'admin',
-                'port' => 8728,
-                'timeout' => 30,
-            ]);
-
-            // Add user to MikroTik with 5-minute access
-            $add_user_query = (new Query('/ip/hotspot/user/add'))
-                ->equal('server', 'server1')
-                ->equal('name', $clients->email) // Use email as the username
-                ->equal('mac-address', $mac_address)
-                ->equal('profile', $profile);  // Set time limit for 5 minutes
-            $client->query($add_user_query)->read();*/
-
-
-
             $router_ip = '10.5.50.1';
-            $redirect_url = 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address;
-            //$redirect_url = 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address;
-            $original_destination = 'http://www.eureka-digital.ma';
-            //return redirect($original_destination);
-            return redirect($redirect_url . '&dst=' . urlencode($original_destination));
-           // return redirect()->back()->with('success', 'Please check your email to verify and upgrade to premium plan.');
+            // Store the verification token in the session as a backup
+            session(['backup_token' => $verificationToken]);
+            session(['mac_address' => $mac_address]);
+            
+            // Instead of redirecting to the router, redirect to token verification page
+            // with information needed to manually connect
+            return redirect()->route('token.verification')->with([
+                'email' => $clients->email,
+                'token_generated' => true,
+                'mac_address' => $mac_address,
+                'router_ip' => $router_ip,
+                'login_url' => 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address
+            ]);
 
         } catch (\Exception $e) {
             \Log::error('MikroTik API Error: ' . $e->getMessage());
@@ -163,44 +172,157 @@ class ClientController extends Controller
     
     public function finale(){
         try {
-        // Connect to MikroTik API
-        $mikrotikClient = new RouterOSAPI([
-            'host' => '192.168.88.1',
-            'user' => 'api',
-            'pass' => 'admin',
-            'port' => 8728,
-            'timeout' => 30,
-        ]);
+            // Get active users using MikroTikService
+            $active_users = $this->mikroTikService->getActiveUsers();
 
-        // Query the active users
-        $active_users_query = new Query('/ip/hotspot/active/print');
-        $active_users = $mikrotikClient->query($active_users_query)->read();
+            // Check if there are active users
+            if (empty($active_users)) {
+                return response()->json(['message' => 'No active users found']);
+            }
 
-        // Check if there are active users
-        if (empty($active_users)) {
-            return response()->json(['message' => 'No active users found']);
-        }
+            // Log the first active user
+            \Log::info('Active user found: ' . json_encode($active_users[0]));
 
-        var_dump($active_users[0]);
+            // Remove the first active session
+            $response = $this->mikroTikService->removeActiveSession($active_users[0]['.id']);
 
-        $remove_old_session_query = new Query('/ip/hotspot/active/remove');
-        $remove_old_session_query->equal('.id', $active_users[0]['.id']);
-        $response = $mikrotikClient->query($remove_old_session_query)->read();
-
-
-        dd($response);
-        // Return the list of active users
-        return response()->json(['active_users' => $active_users]);
+            // Return the response
+            return response()->json(['message' => 'Session removed successfully', 'response' => $response]);
 
         } catch (\Exception $e) {
-            \Log::error('Failed to retrieve active users: ' . $e->getMessage());
-            return response()->json(['error' => 'Failed to retrieve active users'], 500);
+            \Log::error('Failed to manage active users: ' . $e->getMessage());
+            return response()->json(['error' => 'Failed to manage active users: ' . $e->getMessage()], 500);
         }
     }
 
-    public function redirect2(){
-        $loginUrl  = "http://10.5.50.1/login?username=verifieduser&password=verifieduser";
+    public function redirect2()
+    {
+        $mac_address = session('mac_address');
+        if (!$mac_address) {
+            // If MAC address is not in session, redirect to WiFi page
+            return redirect('/wifi');
+        }
+        
+        // Store the verification URL in session for later use
+        session(['return_to_verification' => route('token.verification')]);
+        
+        // Redirect to MikroTik login for free access
+        $loginUrl = "http://10.5.50.1/login?username=$mac_address&password=123456789&mac=$mac_address";
+        
+        // Add a success parameter to the URL that will be shown after login
+        $successUrl = route('check.token');
+        $loginUrl .= "&dst=" . urlencode($successUrl);
+        
         return redirect($loginUrl);
+    }
+
+    public function showTokenVerification()
+    {
+        // Check if there's an email in the session (coming from form submission)
+        $email = session('email');
+        $mac_address = session('mac_address');
+        $login_url = session('login_url');
+        $router_ip = session('router_ip');
+        
+        // If no email in session, it means the user is coming directly to enter an existing code
+        if (!$email) {
+            return view('token_verification');
+        }
+        
+        return view('token_verification', [
+            'email' => $email,
+            'mac_address' => $mac_address,
+            'login_url' => $login_url,
+            'router_ip' => $router_ip
+        ]);
+    }
+
+    public function verifyToken(Request $request)
+    {
+        $request->validate([
+            'token' => 'required|string|size:6',
+        ]);
+
+        $token = $request->input('token');
+        $backupToken = session('backup_token');
+        
+        // Log the token received and the request details
+        \Log::info('Token verification request received', [
+            'token' => $token,
+            'backup_token' => $backupToken,
+            'user_agent' => $request->header('User-Agent'),
+            'ip' => $request->ip()
+        ]);
+
+        try {
+            // Find the client by the token
+            $client = Client::where('verification_token', $token)
+                            ->where('verification_token_expires_at', '>=', now())
+                            ->first();
+
+            // If not found by token in database, check if it matches the backup token in session
+            if (!$client && $backupToken && $token == $backupToken) {
+                // Try to find the most recent client without a verification token
+                $client = Client::whereNull('verification_token')
+                               ->orWhere('verification_token', '')
+                               ->orderBy('created_at', 'desc')
+                               ->first();
+                               
+                if ($client) {
+                    \Log::info('Client found using backup token in session: ' . $client->email);
+                }
+            }
+
+            // Check if the token is valid
+            if (!$client) {
+                \Log::warning('Invalid or expired verification token: ' . $token);
+                return redirect()->route('token.verification')->withErrors(['token' => 'Invalid or expired verification token.']);
+            }
+
+            // Check if maximum attempts reached
+            if ($client->verification_token_attempts >= 5) {
+                \Log::warning('Maximum token attempts reached for: ' . $client->email);
+                return redirect()->route('verification_failed')->withErrors(['error' => 'Maximum verification attempts reached. Please request a new token.']);
+            }
+
+            // Increment the attempts counter
+            $client->verification_token_attempts += 1;
+            $client->save();
+
+            \Log::info('Client found for verification: ' . $client->email);
+
+            try {
+                // Update user profile in MikroTik
+                $this->mikroTikService->updateUserProfile($client->mac_address, 'premium_user');
+                
+                // Mark the user as verified only if MikroTik update was successful
+                $client->email_verified_at = now();
+                $client->verification_token = null;  // Clear the token to prevent reuse
+                $client->premium_expires_at = now()->addDays(7);
+                $client->save();
+                
+                \Log::info('Client email marked as verified: ' . $client->email);
+
+                // Clear the backup token from session
+                session()->forget('backup_token');
+
+                // Redirect to router with premium access
+                $router_ip = '10.5.50.1';
+                $redirect_url = 'http://' . $router_ip . '/login?username='.$client->mac_address.'&password=123456789&mac='.$client->mac_address;
+                $original_destination = 'https://eureka-digital.ma';
+                
+                return redirect($redirect_url . '&dst=' . urlencode($original_destination));
+            } catch (\Exception $e) {
+                // If MikroTik update fails, don't clear the token so user can try again
+                \Log::error('MikroTik update failed: ' . $e->getMessage());
+                return redirect()->route('verification_failed')->withErrors(['error' => 'Failed to update your WiFi access. Please try again later.']);
+            }
+
+        } catch (\Exception $e) {
+            // Log any unexpected exception
+            \Log::error('Token verification error: ' . $e->getMessage());
+            return redirect()->route('verification_failed')->withErrors(['error' => 'Failed to verify your token. Please try again later.']);
+        }
     }
 
     public function verifyEmail(Request $request)
@@ -208,7 +330,7 @@ class ClientController extends Controller
         $token = $request->input('token');
 
         // Log the token received and the request details
-        \Log::info('Verification request received', [
+        \Log::info('Legacy verification request received', [
             'token' => $token,
             'user_agent' => $request->header('User-Agent'),
             'ip' => $request->ip()
@@ -233,69 +355,15 @@ class ClientController extends Controller
             $client->save();
             \Log::info('Client email marked as verified: ' . $client->email);
 
-            // Set profile to premium_user
-            $profile = 'premium_user';
-            
-           /* // Connect to MikroTik API
-            $mikrotikClient = new RouterOSAPI([
-                'host' => '192.168.88.1',
-                'user' => 'api',
-                'pass' => 'admin',
-                'port' => 8728,
-                'timeout' => 30,
-            ]);
-            \Log::info('Connected to MikroTik API for client: ' . $client->email);
-
-            // Check if the user exists in MikroTik before updating the profile
-            $find_user_query = new Query('/ip/hotspot/user/print');
-            $find_user_query->where('name', $client->email);
-            $user_info = $mikrotikClient->query($find_user_query)->read();
-            \Log::info('User Info from MikroTik: ' . json_encode($user_info));
-
-            if (empty($user_info)) {
-                \Log::warning('User not found in MikroTik: ' . $client->email);
-                return redirect()->route('verification_failed')->withErrors(['error' => 'User not found in MikroTik.']);
-            }
-
-            // Get the user's ID from the response and update the profile
-            $user_id = $user_info[0]['.id'];
-            $update_profile_query = new Query('/ip/hotspot/user/set');
-            $update_profile_query->equal('.id', $user_id)  // Use the user's ID
-                                 ->equal('profile', $profile);  // Assign the new profile
-            $response = $mikrotikClient->query($update_profile_query)->read();
-            \Log::info('MikroTik API Response for Profile Update: ' . json_encode($response));
-
-
-            // Find and remove active session to apply the new profile
-            $find_active_user_query = new Query('/ip/hotspot/active/print');
-            $find_active_user_query->where('user', $client->mac_address);
-            $active_session = $mikrotikClient->query($find_active_user_query)->read();
-            \Log::info('Active Session Info: ' . json_encode($active_session));
-
-            if (!empty($active_session)) {
-                $session_id = $active_session[0]['.id'];  // Get the session ID
-
-                $router_ip = '10.5.50.1';
-                $redirect_url = 'http://' . $router_ip . '/login?username=' . $client->email . '&password=&mac=' . $client->mac_address;
-                $original_destination = 'https://eureka-digital.ma';
-
-                \Log::info('Redirecting user to MikroTik login page: ' . $redirect_url);
-                return redirect($redirect_url . '&dst=' . urlencode($original_destination));
-            } else {
-                \Log::warning('No active session found for user: ' . $client->email);
-            }*/
             // Update user profile in MikroTik
-            
             $this->mikroTikService->updateUserProfile($client->mac_address, 'premium_user');
-
-    //return redirect()->route('captive.portal')->with('success', 'Email verified! You now have premium access.');
 
             // Redirect to success if everything went well
             return redirect()->route('verification_success')->with('status', 'Your email has been verified, and your access has been upgraded!');
 
         } catch (\Exception $e) {
             // Log any unexpected exception
-            \Log::error('MikroTik API Error for user ' . $client->email . ': ' . $e->getMessage());
+            \Log::error('MikroTik API Error for user ' . ($client->email ?? 'unknown') . ': ' . $e->getMessage());
             return redirect()->route('verification_failed')->withErrors(['error' => 'Failed to update your access. Please try again later.']);
         }
     }
@@ -354,6 +422,54 @@ class ClientController extends Controller
             \Log::error('Failed to send test email: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to send test email: ' . $e->getMessage()]);
         }
+    }
+
+    public function checkToken(Request $request)
+    {
+        // If no token parameter is provided, show a page that redirects to verification
+        if (!$request->has('token')) {
+            $verificationUrl = session('return_to_verification') ?? route('token.verification');
+            return view('redirect_to_verification', ['verificationUrl' => $verificationUrl]);
+        }
+        
+        $token = $request->input('token');
+        
+        if (!$token) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No token provided'
+            ]);
+        }
+        
+        // Find the client by the token
+        $client = Client::where('verification_token', $token)->first();
+        
+        if (!$client) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token not found in database'
+            ]);
+        }
+        
+        // Check if token is expired
+        $isExpired = $client->verification_token_expires_at < now();
+        
+        // Check if maximum attempts reached
+        $maxAttemptsReached = $client->verification_token_attempts >= 5;
+        
+        return response()->json([
+            'success' => true,
+            'token_found' => true,
+            'client' => [
+                'id' => $client->id,
+                'email' => $client->email,
+                'mac_address' => $client->mac_address,
+                'token_expires_at' => $client->verification_token_expires_at,
+                'token_attempts' => $client->verification_token_attempts,
+                'is_expired' => $isExpired,
+                'max_attempts_reached' => $maxAttemptsReached
+            ]
+        ]);
     }
 
 }
