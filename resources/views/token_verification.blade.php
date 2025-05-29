@@ -143,7 +143,26 @@
         </div>
     @endif
 
+    @if ($errors->has('token'))
+        <div class="alert alert-danger">
+            {{ $errors->first('token') }}
+        </div>
+    @endif
+
     <p class="verification-subtitle">{{ __('Please enter the 6-digit verification code sent to your email. This code is valid for 15 minutes.') }}</p>
+
+    @if(isset($attempts_remaining))
+    <div class="attempts-info" style="text-align: center; margin-bottom: 1rem; color: #666;">
+        <p>{{ __('You have') }} <strong>{{ $attempts_remaining }}</strong> {{ __('attempts remaining') }}</p>
+    </div>
+    @endif
+
+    @if(isset($client) && isset($client->successful_verifications))
+    <div class="successful-verifications" style="text-align: center; margin-bottom: 1rem; background-color: #e8f5e9; padding: 10px; border-radius: 8px; color: #2e7d32;">
+        <p>{{ __('This token has been used on') }} <strong>{{ $client->successful_verifications }}</strong> {{ __('device(s)') }}</p>
+        <p>{{ __('You can still use it on') }} <strong>{{ 5 - $client->successful_verifications }}</strong> {{ __('more device(s)') }}</p>
+    </div>
+    @endif
 
     <form method="POST" action="{{ route('verify.token') }}" id="verificationForm">
         @csrf

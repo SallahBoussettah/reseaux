@@ -32,7 +32,8 @@ class Client extends Authenticatable implements MustVerifyEmail
         'remember_token',
         'verification_token',
         'verification_token_expires_at',
-        'verification_token_attempts'
+        'verification_token_attempts',
+        'successful_verifications'
     ];
 
 

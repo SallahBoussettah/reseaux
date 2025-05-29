@@ -223,18 +223,43 @@ class ClientController extends Controller
         $mac_address = session('mac_address');
         $login_url = session('login_url');
         $router_ip = session('router_ip');
+        $token = session('backup_token');
+        
+        // Initialize client data
+        $client = null;
+        
+        // If we have an email, try to find the client
+        if ($email) {
+            $client = Client::where('email', $email)->first();
+        }
+        // If we have a token in the query string, try to find the client by token
+        elseif (request()->has('token')) {
+            $token = request()->get('token');
+            $client = Client::where('verification_token', $token)->first();
+        }
         
         // If no email in session, it means the user is coming directly to enter an existing code
-        if (!$email) {
+        if (!$email && !$client) {
             return view('token_verification');
         }
         
-        return view('token_verification', [
+        $data = [
             'email' => $email,
             'mac_address' => $mac_address,
             'login_url' => $login_url,
             'router_ip' => $router_ip
-        ]);
+        ];
+        
+        // Add client data if available
+        if ($client) {
+            $data['client'] = $client;
+            $data['attempts'] = $client->verification_token_attempts;
+            $data['attempts_remaining'] = 5 - $client->verification_token_attempts;
+            $data['successful_verifications'] = $client->successful_verifications ?? 0;
+            $data['devices_remaining'] = 5 - ($client->successful_verifications ?? 0);
+        }
+        
+        return view('token_verification', $data);
     }
 
     public function verifyToken(Request $request)
@@ -282,6 +307,9 @@ class ClientController extends Controller
             // Check if maximum attempts reached
             if ($client->verification_token_attempts >= 5) {
                 \Log::warning('Maximum token attempts reached for: ' . $client->email);
+                // Clear the token only when max attempts are reached
+                $client->verification_token = null;
+                $client->save();
                 return redirect()->route('verification_failed')->withErrors(['error' => 'Maximum verification attempts reached. Please request a new token.']);
             }
 
@@ -291,33 +319,59 @@ class ClientController extends Controller
 
             \Log::info('Client found for verification: ' . $client->email);
 
-            try {
-                // Update user profile in MikroTik
-                $this->mikroTikService->updateUserProfile($client->mac_address, 'premium_user');
+            // Check if the token is correct
+            if ($client->verification_token == $token) {
+                try {
+                    // Update user profile in MikroTik
+                    $this->mikroTikService->updateUserProfile($client->mac_address, 'premium_user');
+                    
+                    // Mark the user as verified only if MikroTik update was successful
+                    $client->email_verified_at = now();
+                    
+                    // Instead of clearing the token, track successful verifications
+                    // Only clear the token if it's been successfully used 5 times
+                    $client->successful_verifications = ($client->successful_verifications ?? 0) + 1;
+                    
+                    // Only clear the token if it's been used 5 times
+                    if ($client->successful_verifications >= 5) {
+                        $client->verification_token = null;
+                        \Log::info('Token cleared after 5 successful verifications for: ' . $client->email);
+                    } else {
+                        \Log::info('Token used successfully ' . $client->successful_verifications . ' times for: ' . $client->email);
+                    }
+                    
+                    $client->premium_expires_at = now()->addDays(7);
+                    $client->profile_type = 'premium_user'; // Set profile type to premium_user
+                    $client->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
+                    $client->save();
+                    
+                    \Log::info('Client email marked as verified: ' . $client->email);
+
+                    // Clear the backup token from session
+                    session()->forget('backup_token');
+
+                    // Redirect to router with premium access
+                    $router_ip = '10.5.50.1';
+                    $redirect_url = 'http://' . $router_ip . '/login?username='.$client->mac_address.'&password=123456789&mac='.$client->mac_address;
+                    $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
+                    
+                    return redirect($redirect_url . '&dst=' . urlencode($original_destination));
+                } catch (\Exception $e) {
+                    // If MikroTik update fails, don't clear the token so user can try again
+                    \Log::error('MikroTik update failed: ' . $e->getMessage());
+                    return redirect()->route('verification_failed')->withErrors(['error' => 'Failed to update your WiFi access. Please try again later.']);
+                }
+            } else {
+                // If token doesn't match, increment attempts but keep the token
+                \Log::warning('Invalid token provided for client: ' . $client->email);
                 
-                // Mark the user as verified only if MikroTik update was successful
-                $client->email_verified_at = now();
-                $client->verification_token = null;  // Clear the token to prevent reuse
-                $client->premium_expires_at = now()->addDays(7);
-                $client->profile_type = 'premium_user'; // Set profile type to premium_user
-                $client->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
+                // Save the updated attempts count
                 $client->save();
                 
-                \Log::info('Client email marked as verified: ' . $client->email);
-
-                // Clear the backup token from session
-                session()->forget('backup_token');
-
-                // Redirect to router with premium access
-                $router_ip = '10.5.50.1';
-                $redirect_url = 'http://' . $router_ip . '/login?username='.$client->mac_address.'&password=123456789&mac='.$client->mac_address;
-                $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
-                
-                return redirect($redirect_url . '&dst=' . urlencode($original_destination));
-            } catch (\Exception $e) {
-                // If MikroTik update fails, don't clear the token so user can try again
-                \Log::error('MikroTik update failed: ' . $e->getMessage());
-                return redirect()->route('verification_failed')->withErrors(['error' => 'Failed to update your WiFi access. Please try again later.']);
+                $attemptsRemaining = 5 - $client->verification_token_attempts;
+                return redirect()->route('token.verification')
+                    ->withErrors(['token' => "Invalid verification token. Please try again. You have $attemptsRemaining attempts remaining."])
+                    ->with(['email' => $client->email]);
             }
 
         } catch (\Exception $e) {
