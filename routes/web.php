@@ -61,6 +61,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/clients/export', [DashboardController::class, 'exportClients'])->name('clients.export');
     Route::post('/ban-user', [DashboardController::class, 'banUser']);
     
+    // User deletion test routes
+    Route::get('/test-delete-expired-users', [DashboardController::class, 'testDeleteExpiredUsers'])->name('test.delete.expired');
+    Route::get('/schedule-user-for-deletion/{client_id}', [DashboardController::class, 'manuallyScheduleUserForDeletion'])->name('schedule.deletion');
+    
     // Settings routes
     Route::get('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'index'])->name('admin.settings.index');
     Route::put('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('admin.settings.update');

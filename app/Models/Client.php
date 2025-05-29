@@ -20,6 +20,8 @@ class Client extends Authenticatable implements MustVerifyEmail
         'platform', 
         'premium_expires_at', 
         'status', 
+        'profile_type',
+        'scheduled_deletion_at',
         'last_login_at', 
         'login_count', 
         'created_at', 
@@ -38,11 +40,13 @@ class Client extends Authenticatable implements MustVerifyEmail
 
     protected $dates = [
         'premium_expires_at',
-        'verification_token_expires_at'
+        'verification_token_expires_at',
+        'scheduled_deletion_at'
     ];
 
     protected $casts = [
         'email_verified_at' => 'datetime',
         'verification_token_expires_at' => 'datetime',
+        'scheduled_deletion_at' => 'datetime',
     ];
 }

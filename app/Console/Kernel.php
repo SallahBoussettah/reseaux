@@ -21,6 +21,14 @@ class Kernel extends ConsoleKernel
 
         // Schedule the premium expiration check to run daily
         $schedule->command('premium:check-expired')->daily();
+        
+        // Schedule the premium user deletion check to run every minute (for testing)
+        // Later this can be changed to run every hour or daily
+        $schedule->command('users:delete-expired')->everyMinute();
+        
+        // Schedule the user banning check to run every minute (for testing)
+        // Later this can be changed to run every hour or daily
+        $schedule->command('users:ban-scheduled')->everyMinute();
     }
 
     /**

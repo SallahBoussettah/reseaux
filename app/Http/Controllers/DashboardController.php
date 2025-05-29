@@ -92,7 +92,7 @@ class DashboardController extends Controller
         $active_sessions_query = new Query('/ip/hotspot/active/print');
         $active_sessions = $mikrotikClient->query($active_sessions_query)->read();*/
 
-        $clients = Client::select('id', 'full_name', 'email', 'mac_address', 'device_type', 'platform', 'login_count', 'premium_expires_at','status')
+        $clients = Client::select('id', 'full_name', 'email', 'mac_address', 'device_type', 'platform', 'login_count', 'premium_expires_at', 'status', 'profile_type', 'scheduled_deletion_at')
         ->orderBy('created_at', 'desc')
         ->paginate(10);  // Paginate if you have many clients
 
@@ -211,6 +211,45 @@ class DashboardController extends Controller
             \Log::error('MikroTik API Error: ' . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'Failed to deactivate user. Please try again later.']);
         }
+    }
+
+    public function testDeleteExpiredUsers()
+    {
+        try {
+            // Call the command directly
+            \Artisan::call('users:delete-expired');
+            
+            // Get the output from the command
+            $output = \Artisan::output();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Command executed successfully',
+                'details' => $output
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error executing command: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    public function manuallyScheduleUserForDeletion($client_id)
+    {
+        // Find the client by ID
+        $client = \App\Models\Client::find($client_id);
+        
+        if (!$client) {
+            return redirect()->back()->withErrors(['error' => 'Client not found']);
+        }
+        
+        // Schedule the client for deletion in 1 minute
+        $client->profile_type = 'premium_user';
+        $client->scheduled_deletion_at = now()->addMinute();
+        $client->save();
+        
+        return redirect()->back()->with('success', 'User scheduled for deletion in 1 minute');
     }
 
 }

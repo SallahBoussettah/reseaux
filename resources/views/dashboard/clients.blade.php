@@ -10,7 +10,11 @@
 				</div>
 				
 				<div class="geex-content__header__action">
-				 
+				    <div class="geex-content__header__action__wrap">
+				        <a href="{{ route('test.delete.expired') }}" class="btn btn-primary" style="margin-right: 10px;">
+				            Test Delete Expired Users
+				        </a>
+				    </div>
 				    <div class="geex-content__header__action__wrap">
 				        <ul class="geex-content__header__quickaction">
 				           
@@ -75,7 +79,21 @@
 			</div>
 
 			<div class="geex-content__section geex-content__form table-responsive">
+                @if(session('success'))
+                    <div class="alert alert-success">
+                        {{ session('success') }}
+                    </div>
+                @endif
 
+                @if($errors->any())
+                    <div class="alert alert-danger">
+                        <ul>
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
 
                 <table class="table-reviews-geex-1">
                     <thead>
@@ -87,6 +105,7 @@
 			                <th>Platform</th>
 			                <th>Login Count</th>
 			                <th>Premium Expires At</th>
+			                <th>Profile Type</th>
 			                <th>Status</th>
 			                <th>Actions</th>
                         </tr>
@@ -100,18 +119,25 @@
 		                <td>{{ ucfirst($client->device_type) }}</td>
 		                <td>{{ ucfirst($client->platform) }}</td>
 		                <td>{{ $client->login_count }}</td>
-		                <td>{{ $client->premium_expires_at ? $client->premium_expires_at->format('Y-m-d') : 'N/A' }}</td>
+		                <td>{{ $client->premium_expires_at ? $client->premium_expires_at->format('Y-m-d H:i:s') : 'N/A' }}</td>
+		                <td>{{ $client->profile_type ?? 'free_user' }}</td>
 		                <td>{{ $client->status ? ucfirst($client->status) : 'N/A' }}</td>
 		                <td>
-		                    @if ($client->status === 'active')
-			                <form action="{{ route('clients.deactivate', $client->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to deactivate this user?');">
-			                    @csrf
-			                    @method('PATCH')
-			                    <button type="submit" class="btn btn-danger" style="color: #fff;">Deactivate</button>
-			                </form>
-			                @else
-			                <span class="badge badge-secondary" style="color: #000;">Deactivated</span>
-			                @endif
+		                    <div class="d-flex">
+		                        @if ($client->status === 'active')
+    			                <form action="{{ route('clients.deactivate', $client->id) }}" method="POST" onsubmit="return confirm('Are you sure you want to deactivate this user?');" style="margin-right: 5px;">
+    			                    @csrf
+    			                    @method('PATCH')
+    			                    <button type="submit" class="btn btn-danger" style="color: #fff;">Deactivate</button>
+    			                </form>
+    			                @else
+    			                <span class="badge badge-secondary" style="color: #000; margin-right: 5px;">Deactivated</span>
+    			                @endif
+    			                
+    			                <a href="{{ route('schedule.deletion', $client->id) }}" class="btn btn-warning" style="color: #000;" onclick="return confirm('Are you sure you want to schedule this user for deletion in 1 minute?');">
+    			                    Schedule Deletion
+    			                </a>
+		                    </div>
 		                </td>
 		            </tr>
 		            @endforeach

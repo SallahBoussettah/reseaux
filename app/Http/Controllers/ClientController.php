@@ -299,6 +299,8 @@ class ClientController extends Controller
                 $client->email_verified_at = now();
                 $client->verification_token = null;  // Clear the token to prevent reuse
                 $client->premium_expires_at = now()->addDays(7);
+                $client->profile_type = 'premium_user'; // Set profile type to premium_user
+                $client->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
                 $client->save();
                 
                 \Log::info('Client email marked as verified: ' . $client->email);
@@ -352,6 +354,8 @@ class ClientController extends Controller
             $client->email_verified_at = now();
             $client->remember_token = '';  // Clear the token to prevent reuse
             $client->premium_expires_at = now()->addDays(7);
+            $client->profile_type = 'premium_user'; // Set profile type to premium_user
+            $client->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
             $client->save();
             \Log::info('Client email marked as verified: ' . $client->email);
 

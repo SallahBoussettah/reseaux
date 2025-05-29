@@ -31,4 +31,12 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'mikrotik' => [
+        'host' => env('MIKROTIK_HOST', '10.10.10.1'),
+        'user' => env('MIKROTIK_USER', 'api'),
+        'pass' => env('MIKROTIK_PASS', 'password'),
+        'port' => (int)env('MIKROTIK_PORT', 8728),
+        'timeout' => (int)env('MIKROTIK_TIMEOUT', 30),
+    ],
+
 ];
