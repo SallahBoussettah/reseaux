@@ -60,4 +60,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/statistics', [DashboardController::class, 'statistics'])->name('statistics');
     Route::get('/clients/export', [DashboardController::class, 'exportClients'])->name('clients.export');
     Route::post('/ban-user', [DashboardController::class, 'banUser']);
+    
+    // Settings routes
+    Route::get('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'index'])->name('admin.settings.index');
+    Route::put('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('admin.settings.update');
 });

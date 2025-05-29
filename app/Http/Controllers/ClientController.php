@@ -309,7 +309,7 @@ class ClientController extends Controller
                 // Redirect to router with premium access
                 $router_ip = '10.5.50.1';
                 $redirect_url = 'http://' . $router_ip . '/login?username='.$client->mac_address.'&password=123456789&mac='.$client->mac_address;
-                $original_destination = 'https://eureka-digital.ma';
+                $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
                 
                 return redirect($redirect_url . '&dst=' . urlencode($original_destination));
             } catch (\Exception $e) {

@@ -1,11 +1,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
 
+/* Remove hardcoded colors and let them be defined by the app.blade.php */
 :root {
-    --primary-color: #92E3A9;
-    --secondary-color: #4CAF50;
+    /* These values will be overridden by the inline styles in app.blade.php */
     --error-color: #FF5252;
     --text-color: #333;
-    --background-color: #F4F7FE;
 }
 
 * {
