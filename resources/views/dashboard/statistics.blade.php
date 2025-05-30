@@ -475,7 +475,7 @@ function formatBandwidth(bytes) {
 // Split chart initialization into phases for faster loading
 function initializePrimaryCharts() {
     // Initialize only the gauge charts first - they're simple and lightweight
-    const maxNetworkSpeed = 100 * 1000000; // 100 Mbps in bps
+    const maxNetworkSpeed = 1000 * 1000000; // 1 Gbps in bps (changed from 100 Mbps)
     const totalRxRateRaw = {{ array_sum(array_column($activeConnections, 'rx_rate_raw') ?: [0]) }};
     const totalTxRateRaw = {{ array_sum(array_column($activeConnections, 'tx_rate_raw') ?: [0]) }};
     
@@ -931,12 +931,60 @@ function refreshBandwidthData() {
             if (elements.length > 2) {
                 elements[1].textContent = data.totalRx;
                 elements[2].textContent = data.totalTx;
+                
+                // Add total bytes information if available
+                if (data.totalRxBytes) {
+                    const totalRxElement = document.querySelectorAll('.card-body h2')[1];
+                    if (totalRxElement) {
+                        totalRxElement.innerHTML = `${data.totalRx}<small class="d-block text-muted fs-6 mt-1">${data.totalRxBytes} total</small>`;
+                    }
+                }
+                
+                if (data.totalTxBytes) {
+                    const totalTxElement = document.querySelectorAll('.card-body h2')[2];
+                    if (totalTxElement) {
+                        totalTxElement.innerHTML = `${data.totalTx}<small class="d-block text-muted fs-6 mt-1">${data.totalTxBytes} total</small>`;
+                    }
+                }
             }
             
-            const rxElement = document.querySelectorAll('.card-body .text-primary')[0];
-            const txElement = document.querySelectorAll('.card-body .text-success')[0];
-            if (rxElement) rxElement.innerHTML = `<i class="uil uil-arrow-down"></i> ${data.averageRx}`;
-            if (txElement) txElement.innerHTML = `<i class="uil uil-arrow-up"></i> ${data.averageTx}`;
+            // Make sure the average values are displayed properly
+            const averageContainer = document.querySelector('.card-body .d-flex.justify-content-center.align-items-center');
+            if (averageContainer) {
+                const rxElement = averageContainer.querySelector('.text-primary');
+                const txElement = averageContainer.querySelector('.text-success');
+                
+                if (rxElement) rxElement.innerHTML = `<i class="uil uil-arrow-down"></i> ${data.averageRx}`;
+                if (txElement) txElement.innerHTML = `<i class="uil uil-arrow-up"></i> ${data.averageTx}`;
+            } else {
+                // If the container doesn't exist, find the parent and create it
+                const averageCard = document.querySelectorAll('.metric-card')[3];
+                if (averageCard) {
+                    const cardBody = averageCard.querySelector('.card-body');
+                    if (cardBody) {
+                        const header = cardBody.querySelector('h6');
+                        if (header) {
+                            const container = document.createElement('div');
+                            container.className = 'd-flex justify-content-center align-items-center';
+                            container.innerHTML = `
+                                <div class="text-primary me-3">
+                                    <i class="uil uil-arrow-down"></i> ${data.averageRx}
+                                </div>
+                                <div class="text-success">
+                                    <i class="uil uil-arrow-up"></i> ${data.averageTx}
+                                </div>
+                            `;
+                            
+                            // Replace any existing content after the header
+                            while (cardBody.childNodes.length > 1) {
+                                cardBody.removeChild(cardBody.lastChild);
+                            }
+                            
+                            cardBody.appendChild(container);
+                        }
+                    }
+                }
+            }
             
             // Update chart data - if chart exists and we have data
             if (window.realTimeBandwidthChart && data.labels && data.labels.length > 0) {
@@ -987,8 +1035,14 @@ function refreshBandwidthData() {
                                 <td>${conn.username}</td>
                                 <td>${conn.ip_address}</td>
                                 <td><span class="small text-muted">${conn.mac_address}</span></td>
-                                <td><span class="badge bg-primary rounded-pill">${conn.rx_rate}</span></td>
-                                <td><span class="badge bg-success rounded-pill">${conn.tx_rate}</span></td>
+                                <td>
+                                    <span class="badge bg-primary rounded-pill">${conn.rx_rate}</span>
+                                    ${conn.bytes_in_formatted ? `<small class="d-block text-muted mt-1">${conn.bytes_in_formatted}</small>` : ''}
+                                </td>
+                                <td>
+                                    <span class="badge bg-success rounded-pill">${conn.tx_rate}</span>
+                                    ${conn.bytes_out_formatted ? `<small class="d-block text-muted mt-1">${conn.bytes_out_formatted}</small>` : ''}
+                                </td>
                                 <td>${conn.uptime}</td>
                             </tr>
                         `;
@@ -1002,7 +1056,7 @@ function refreshBandwidthData() {
             if (data.rxData && data.txData && window.downloadGaugeChart && window.uploadGaugeChart) {
                 const totalRxRateRaw = data.rxData.reduce((sum, val) => sum + val, 0);
                 const totalTxRateRaw = data.txData.reduce((sum, val) => sum + val, 0);
-                const maxNetworkSpeed = 100 * 1000000; // 100 Mbps in bps
+                const maxNetworkSpeed = 1000 * 1000000; // 1 Gbps in bps (changed from 100 Mbps)
                 
                 // Calculate percentage of network capacity
                 const downloadPercentage = Math.min(100, (totalRxRateRaw / maxNetworkSpeed) * 100);

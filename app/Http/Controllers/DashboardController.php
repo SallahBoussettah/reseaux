@@ -364,11 +364,15 @@ class DashboardController extends Controller
             // Calculate total and average bandwidth usage
             $totalRxRate = 0;
             $totalTxRate = 0;
+            $totalRxBytes = 0;
+            $totalTxBytes = 0;
             $userCount = count($activeConnections);
             
             foreach ($activeConnections as $connection) {
                 $totalRxRate += $connection['rx_rate_raw'];
                 $totalTxRate += $connection['tx_rate_raw'];
+                $totalRxBytes += isset($connection['bytes_in']) ? $connection['bytes_in'] : 0;
+                $totalTxBytes += isset($connection['bytes_out']) ? $connection['bytes_out'] : 0;
             }
             
             // Extract data for the chart
@@ -388,6 +392,8 @@ class DashboardController extends Controller
                 'activeUsers' => $userCount,
                 'totalRx' => $this->formatBandwidth($totalRxRate),
                 'totalTx' => $this->formatBandwidth($totalTxRate),
+                'totalRxBytes' => $totalRxBytes > 0 ? $mikrotikService->formatBytesTransferred($totalRxBytes) : null,
+                'totalTxBytes' => $totalTxBytes > 0 ? $mikrotikService->formatBytesTransferred($totalTxBytes) : null,
                 'averageRx' => $userCount > 0 ? $this->formatBandwidth($totalRxRate / $userCount) : '0 bps',
                 'averageTx' => $userCount > 0 ? $this->formatBandwidth($totalTxRate / $userCount) : '0 bps',
                 'connections' => $activeConnections,

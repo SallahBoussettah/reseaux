@@ -227,9 +227,17 @@ class MikroTikService
                 $rxRateRaw = $connection['rx-rate'] ?? 0;
                 $txRateRaw = $connection['tx-rate'] ?? 0;
                 
+                // Extract total bytes transferred
+                $bytesIn = isset($connection['bytes-in']) ? (int)$connection['bytes-in'] : 0;
+                $bytesOut = isset($connection['bytes-out']) ? (int)$connection['bytes-out'] : 0;
+                
                 // Format bandwidth
                 $rxRate = $this->formatBandwidth($rxRateRaw);
                 $txRate = $this->formatBandwidth($txRateRaw);
+                
+                // Format bytes transferred for display
+                $bytesInFormatted = $this->formatBytesTransferred($bytesIn);
+                $bytesOutFormatted = $this->formatBytesTransferred($bytesOut);
                 
                 // Extract session time
                 $uptime = $connection['uptime'] ?? '00:00:00';
@@ -243,6 +251,10 @@ class MikroTikService
                     'tx_rate' => $txRate,       // Upload speed
                     'rx_rate_raw' => $rxRateRaw,  // Raw value for calculations
                     'tx_rate_raw' => $txRateRaw,  // Raw value for calculations
+                    'bytes_in' => $bytesIn,       // Total bytes downloaded
+                    'bytes_out' => $bytesOut,     // Total bytes uploaded
+                    'bytes_in_formatted' => $bytesInFormatted, // Formatted bytes downloaded
+                    'bytes_out_formatted' => $bytesOutFormatted, // Formatted bytes uploaded
                     'uptime' => $uptime,
                     'login_time' => $connection['login-by'] ?? 'unknown',
                     'session_id' => $connection['.id'] ?? null
@@ -294,6 +306,22 @@ class MikroTikService
             return round($bytes / 1000, 2) . ' Kbps';
         } else {
             return $bytes . ' bps';
+        }
+    }
+    
+    // Helper function to format total bytes transferred to human-readable format
+    public function formatBytesTransferred($bytes)
+    {
+        $bytes = (int)$bytes;
+        
+        if ($bytes > 1073741824) {
+            return round($bytes / 1073741824, 2) . ' GB'; // Convert to gigabytes
+        } elseif ($bytes > 1048576) {
+            return round($bytes / 1048576, 2) . ' MB'; // Convert to megabytes
+        } elseif ($bytes > 1024) {
+            return round($bytes / 1024, 2) . ' KB'; // Convert to kilobytes
+        } else {
+            return $bytes . ' B'; // Bytes
         }
     }
 }
