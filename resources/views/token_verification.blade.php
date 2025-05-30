@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Verify Your Code')
+@section('title', 'Verify Your Email')
 
 @section('css')
 <style>
@@ -130,76 +130,12 @@
         color: #c62828;
         border-left: 4px solid #c62828;
     }
-
-    /* Add styles for the new form */
-    .user-info-form {
-        margin-bottom: 2rem;
-    }
-    
-    .form-group {
-        position: relative;
-        margin-bottom: 1.5rem;
-    }
-    
-    .form-group input[type="text"] {
-        width: 100%;
-        padding: 12px 15px;
-        font-size: 1rem;
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        transition: all 0.3s;
-        background-color: #f9f9f9;
-    }
-    
-    .gender-section {
-        margin-bottom: 1.5rem;
-    }
-    
-    .gender-label {
-        display: block;
-        margin-bottom: 0.8rem;
-        color: #666;
-        font-size: 0.9rem;
-    }
-    
-    .radio-group {
-        display: flex;
-        gap: 20px;
-    }
-    
-    .radio-option {
-        display: flex;
-        align-items: center;
-        cursor: pointer;
-    }
-    
-    .radio-option input[type="radio"] {
-        margin-right: 8px;
-        cursor: pointer;
-        accent-color: var(--primary-color);
-        width: 18px;
-        height: 18px;
-    }
-    
-    .btn-submit {
-        background-color: var(--primary-color);
-        color: white;
-        border: none;
-        padding: 12px 30px;
-        border-radius: 8px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color 0.3s;
-        display: block;
-        width: 100%;
-    }
 </style>
 @endsection
 
 @section('content')
 <div class="verification-container">
-    <h2 class="verification-title">{{ __('WiFi Access Verification') }}</h2>
+    <h2 class="verification-title">{{ __('Verify Your Email') }}</h2>
     
     @if (session('error'))
         <div class="alert alert-danger">
@@ -207,58 +143,50 @@
         </div>
     @endif
 
-    @if ($errors->any())
+    @if ($errors->has('token'))
         <div class="alert alert-danger">
-            <ul style="margin: 0; padding-left: 20px;">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
+            {{ $errors->first('token') }}
         </div>
     @endif
 
-    <!-- Token Verification Form (always shown) -->
-    <div id="tokenVerificationForm">
-        <p class="verification-subtitle">{{ __('Please enter the 6-digit verification code') }}</p>
+    <p class="verification-subtitle">{{ __('Please enter the 6-digit verification code sent to your email. This code is valid for 15 minutes.') }}</p>
 
-        @if(isset($attempts_remaining))
-        <div class="attempts-info" style="text-align: center; margin-bottom: 1rem; color: #666;">
-            <p>{{ __('You have') }} <strong>{{ $attempts_remaining }}</strong> {{ __('attempts remaining') }}</p>
-        </div>
-        @endif
-
-        @if(isset($client) && isset($client->successful_verifications))
-        <div class="successful-verifications" style="text-align: center; margin-bottom: 1rem; background-color: #e8f5e9; padding: 10px; border-radius: 8px; color: #2e7d32;">
-            <p>{{ __('This token has been used on') }} <strong>{{ $client->successful_verifications }}</strong> {{ __('device(s)') }}</p>
-            <p>{{ __('You can still use it on') }} <strong>{{ 5 - $client->successful_verifications }}</strong> {{ __('more device(s)') }}</p>
-        </div>
-        @endif
-
-        <form method="POST" action="{{ route('verify.token') }}" id="verificationForm">
-            @csrf
-            
-            <div class="code-input-group">
-                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="one-time-code" required>
-                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-            </div>
-            
-            <input type="hidden" id="token" name="token" value="{{ old('token') }}">
-            
-            <button type="submit" class="btn-verify">
-                {{ __('Verify Code') }}
-            </button>
-            
-            <a href="{{ url('/wifi') }}" class="btn-link">
-                {{ __('Need a new code?') }}
-            </a>
-        </form>
+    @if(isset($attempts_remaining))
+    <div class="attempts-info" style="text-align: center; margin-bottom: 1rem; color: #666;">
+        <p>{{ __('You have') }} <strong>{{ $attempts_remaining }}</strong> {{ __('attempts remaining') }}</p>
     </div>
+    @endif
 
-    <!-- Keep the free access section as is -->
+    @if(isset($client) && isset($client->successful_verifications))
+    <div class="successful-verifications" style="text-align: center; margin-bottom: 1rem; background-color: #e8f5e9; padding: 10px; border-radius: 8px; color: #2e7d32;">
+        <p>{{ __('This token has been used on') }} <strong>{{ $client->successful_verifications }}</strong> {{ __('device(s)') }}</p>
+        <p>{{ __('You can still use it on') }} <strong>{{ 5 - $client->successful_verifications }}</strong> {{ __('more device(s)') }}</p>
+    </div>
+    @endif
+
+    <form method="POST" action="{{ route('verify.token') }}" id="verificationForm">
+        @csrf
+        
+        <div class="code-input-group">
+            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="one-time-code" required>
+            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+        </div>
+        
+        <input type="hidden" id="token" name="token" value="{{ old('token') }}">
+        
+        <button type="submit" class="btn-verify">
+            {{ __('Verify Code') }}
+        </button>
+        
+        <a href="{{ url('/wifi') }}" class="btn-link">
+            {{ __('Need a new code?') }}
+        </a>
+    </form>
+
     @if(session('mac_address'))
     <div class="free-access-section">
         <h4 class="free-access-title">{{ __('Get 5-minute free access while waiting for your code') }}</h4>
