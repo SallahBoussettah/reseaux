@@ -10,6 +10,7 @@ use \RouterOS\Client as RouterOSAPI;
 use \RouterOS\Query;
 use DB;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
@@ -102,38 +103,113 @@ class DashboardController extends Controller
 
     public function statistics()
     {
+        // Start with empty default values
+        $activeConnections = [];
+        $averageRxRate = '0 bps';
+        $averageTxRate = '0 bps';
+        $totalRxRateFormatted = '0 bps';
+        $totalTxRateFormatted = '0 bps';
+        
+        // Use cached statistics data if available (cache for 1 hour)
+        $statistics = Cache::remember('statistics_data', now()->addHour(), function () {
+            return Client::select(
+                // Daily active users (last 30 days) - this is simpler than grouping by hour
+                DB::raw('COUNT(DISTINCT email) as daily_active_users'),
+                
+                // Monthly active users (current month)
+                DB::raw('SUM(CASE WHEN MONTH(last_login_at) = MONTH(CURDATE()) THEN 1 ELSE 0 END) as monthly_active_users'),
 
-        $statistics = Client::select(
-            // Daily active users (last 30 days)
-            DB::raw('COUNT(DISTINCT email) as daily_active_users'),
-            
-            // Monthly active users (current month)
-            DB::raw('SUM(CASE WHEN MONTH(last_login_at) = MONTH(CURDATE()) THEN 1 ELSE 0 END) as monthly_active_users'),
+                // Total bandwidth usage per user (sum of data_usage)
+                DB::raw('SUM(data_usage) as total_bandwidth_usage'),
 
-            // Total bandwidth usage per user (sum of data_usage)
-            DB::raw('SUM(data_usage) as total_bandwidth_usage'),
+                // Retention rate (users with more than one login)
+                DB::raw('SUM(CASE WHEN login_count > 1 THEN 1 ELSE 0 END) as returning_users')
+            )
+            ->whereBetween('last_login_at', [now()->subDays(30), now()]) // Restrict to the last 30 days
+            ->get();
+        });
+        
+        // Fetch user activity by hour in a separate query and cache it (cache for 1 day)
+        $usersByHour = Cache::remember('users_by_hour', now()->addDay(), function () {
+            return Client::select(
+                DB::raw('HOUR(last_login_at) as hour_of_day, COUNT(*) as users_by_hour')
+            )
+            ->whereBetween('last_login_at', [now()->subDays(30), now()])
+            ->groupBy(DB::raw('HOUR(last_login_at)'))
+            ->get()
+            ->pluck('users_by_hour', 'hour_of_day')
+            ->toArray();
+        });
+        
+        // Fill in missing hours with zeros
+        $completeUsersByHour = [];
+        for ($i = 0; $i < 24; $i++) {
+            $completeUsersByHour[$i] = $usersByHour[$i] ?? 0;
+        }
+        
+        // Use cached bandwidth usage data (cache for 1 hour)
+        $bandwidthUsagePerUser = Cache::remember('bandwidth_usage_per_user', now()->addHour(), function () {
+            return Client::select(
+                'full_name',
+                'data_usage',
+                'email'
+            )
+            ->orderByDesc('data_usage')
+            ->take(10)
+            ->get();
+        });
+        
+        // Check if we have cached MikroTik data
+        if (Cache::has('bandwidth_data')) {
+            $cachedData = Cache::get('bandwidth_data');
+            if (isset($cachedData['connections'])) {
+                $activeConnections = $cachedData['connections'];
+            }
+            if (isset($cachedData['totalRx'])) {
+                $totalRxRateFormatted = $cachedData['totalRx'];
+            }
+            if (isset($cachedData['totalTx'])) {
+                $totalTxRateFormatted = $cachedData['totalTx'];
+            }
+            if (isset($cachedData['averageRx'])) {
+                $averageRxRate = $cachedData['averageRx'];
+            }
+            if (isset($cachedData['averageTx'])) {
+                $averageTxRate = $cachedData['averageTx'];
+            }
+        }
+        
+        // Add the hourly data to the statistics collection
+        if (!empty($statistics) && $statistics->count() > 0) {
+            $statistics->first()->users_by_hour = $completeUsersByHour;
+        }
 
-            // Retention rate (users with more than one login)
-            DB::raw('SUM(CASE WHEN login_count > 1 THEN 1 ELSE 0 END) as returning_users'),
-
-            // Group by the hour of the day to check user activity by time of day
-            DB::raw('HOUR(last_login_at) as hour_of_day, COUNT(*) as users_by_hour')
-        )
-        ->whereBetween('last_login_at', [now()->subDays(30), now()]) // Restrict to the last 30 days
-        ->groupBy(DB::raw('HOUR(last_login_at)')) // Group by hour for user activity
-        ->get();
-
-        $bandwidthUsagePerUser = Client::select(
-            'full_name',
-            'data_usage',
-            'email'
-        )
-        ->orderByDesc('data_usage') // Get users with the highest data usage first
-        ->take(10) // Fetch top 10 users by data usage
-        ->get();
-
-        return view('dashboard.statistics', compact('statistics','bandwidthUsagePerUser'));
+        // Pass both historical and real-time data to the view
+        return view('dashboard.statistics', compact(
+            'statistics',
+            'bandwidthUsagePerUser',
+            'activeConnections',
+            'averageRxRate',
+            'averageTxRate',
+            'totalRxRateFormatted',
+            'totalTxRateFormatted'
+        ));
     }
+    
+    // Helper function to format bandwidth
+    private function formatBandwidth($bytes)
+    {
+        $bytes = (int)$bytes;
+        
+        if ($bytes > 1000000) {
+            return round($bytes / 1000000, 2) . ' Mbps';
+        } elseif ($bytes > 1000) {
+            return round($bytes / 1000, 2) . ' Kbps';
+        } else {
+            return $bytes . ' bps';
+        }
+    }
+
     public function exportClients()
     {
         return Excel::download(new ClientsExport, 'clients.xlsx');
@@ -252,4 +328,100 @@ class DashboardController extends Controller
         return redirect()->back()->with('success', 'User scheduled for deletion in 1 minute');
     }
 
+    /**
+     * Get real-time bandwidth data for AJAX requests
+     * 
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getBandwidthData()
+    {
+        try {
+            // Check if we have a cached version (cache for 5 seconds to prevent hammering the router)
+            if (Cache::has('bandwidth_data') && !request()->has('force_refresh')) {
+                return response()->json(Cache::get('bandwidth_data'));
+            }
+            
+            // Connect to MikroTik with appropriate settings from the environment
+            $mikrotikClient = new RouterOSAPI([
+                'host' => env('MIKROTIK_HOST', 'eurekadigital.ddns.net'),
+                'user' => env('MIKROTIK_USER', 'api'),
+                'pass' => env('MIKROTIK_PASS', 'Erekapp314'),
+                'port' => (int)env('MIKROTIK_PORT', 8728),
+                'timeout' => 5, // Reduced timeout to avoid long waits
+            ]);
+            
+            // Create MikroTik service instance
+            $mikrotikService = new \App\Services\MikroTikService($mikrotikClient);
+            
+            // Test connection to ensure it's working
+            if (!$mikrotikService->testConnection()) {
+                throw new \Exception("Cannot establish connection to MikroTik router");
+            }
+            
+            // Get active connections with bandwidth usage
+            $activeConnections = $mikrotikService->getActiveConnectionsWithBandwidth();
+            
+            // Calculate total and average bandwidth usage
+            $totalRxRate = 0;
+            $totalTxRate = 0;
+            $userCount = count($activeConnections);
+            
+            foreach ($activeConnections as $connection) {
+                $totalRxRate += $connection['rx_rate_raw'];
+                $totalTxRate += $connection['tx_rate_raw'];
+            }
+            
+            // Extract data for the chart
+            $rxData = [];
+            $txData = [];
+            $labels = [];
+            
+            foreach ($activeConnections as $connection) {
+                $rxData[] = $connection['rx_rate_raw'];
+                $txData[] = $connection['tx_rate_raw'];
+                $labels[] = $connection['username'];
+            }
+            
+            // Create response data
+            $responseData = [
+                'success' => true,
+                'activeUsers' => $userCount,
+                'totalRx' => $this->formatBandwidth($totalRxRate),
+                'totalTx' => $this->formatBandwidth($totalTxRate),
+                'averageRx' => $userCount > 0 ? $this->formatBandwidth($totalRxRate / $userCount) : '0 bps',
+                'averageTx' => $userCount > 0 ? $this->formatBandwidth($totalTxRate / $userCount) : '0 bps',
+                'connections' => $activeConnections,
+                'rxData' => $rxData,
+                'txData' => $txData,
+                'labels' => $labels,
+                'timestamp' => now()->timestamp,
+                'source' => 'live'
+            ];
+            
+            // Cache the response for 5 seconds
+            Cache::put('bandwidth_data', $responseData, now()->addSeconds(5));
+            
+            return response()->json($responseData);
+            
+        } catch (\Exception $e) {
+            \Log::error('Failed to get bandwidth data: ' . $e->getMessage());
+            
+            // Check if we have a cached version we can fall back to
+            if (Cache::has('bandwidth_data')) {
+                $cachedData = Cache::get('bandwidth_data');
+                $cachedData['success'] = true;
+                $cachedData['fromCache'] = true;
+                $cachedData['cacheReason'] = 'Error connecting to router: ' . $e->getMessage();
+                
+                return response()->json($cachedData);
+            }
+            
+            // If no cache is available, return an error response
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur de connexion au routeur MikroTik',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

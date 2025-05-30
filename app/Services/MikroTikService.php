@@ -193,4 +193,107 @@ class MikroTikService
             return null;
         }
     }
+    
+    // Get active connections with bandwidth usage (Rx/Tx rates)
+    public function getActiveConnectionsWithBandwidth()
+    {
+        try {
+            // First check if the connection is working
+            if (!$this->testConnection()) {
+                throw new \Exception("Cannot establish connection to MikroTik router");
+            }
+            
+            // Log connection attempt details
+            \Log::info('Attempting to fetch active connections from MikroTik at: ' . 
+                      env('MIKROTIK_HOST', 'eurekadigital.ddns.net') . ':' . 
+                      env('MIKROTIK_PORT', 8728));
+            
+            // Query to get active hotspot users with their details
+            $query = (new Query('/ip/hotspot/active/print'));
+            $activeConnections = $this->client->query($query)->read();
+            
+            // Log the number of active connections found
+            \Log::info('Found ' . count($activeConnections) . ' active connections on MikroTik router');
+            
+            // Process and format the data
+            $formattedConnections = [];
+            foreach ($activeConnections as $connection) {
+                // Extract user info
+                $username = $connection['user'] ?? 'unknown';
+                $macAddress = $connection['mac-address'] ?? 'unknown';
+                $ipAddress = $connection['address'] ?? 'unknown';
+                
+                // Extract bandwidth usage (convert from bytes to more readable format)
+                $rxRateRaw = $connection['rx-rate'] ?? 0;
+                $txRateRaw = $connection['tx-rate'] ?? 0;
+                
+                // Format bandwidth
+                $rxRate = $this->formatBandwidth($rxRateRaw);
+                $txRate = $this->formatBandwidth($txRateRaw);
+                
+                // Extract session time
+                $uptime = $connection['uptime'] ?? '00:00:00';
+                
+                // Add to formatted array
+                $formattedConnections[] = [
+                    'username' => $username,
+                    'mac_address' => $macAddress,
+                    'ip_address' => $ipAddress,
+                    'rx_rate' => $rxRate,       // Download speed
+                    'tx_rate' => $txRate,       // Upload speed
+                    'rx_rate_raw' => $rxRateRaw,  // Raw value for calculations
+                    'tx_rate_raw' => $txRateRaw,  // Raw value for calculations
+                    'uptime' => $uptime,
+                    'login_time' => $connection['login-by'] ?? 'unknown',
+                    'session_id' => $connection['.id'] ?? null
+                ];
+            }
+            
+            return $formattedConnections;
+        } catch (\Exception $e) {
+            \Log::error('Failed to get active connections with bandwidth: ' . $e->getMessage());
+            \Log::error('Exception details: ' . $e->getTraceAsString());
+            
+            // Add more detailed error diagnostics based on the error type
+            if (strpos($e->getMessage(), 'timeout') !== false) {
+                \Log::error('MikroTik connection timeout - check network connectivity to ' . 
+                           env('MIKROTIK_HOST', 'eurekadigital.ddns.net') . ':' . 
+                           env('MIKROTIK_PORT', 8728));
+            } elseif (strpos($e->getMessage(), 'refused') !== false) {
+                \Log::error('MikroTik connection refused - verify that API service is running on the router');
+            }
+            
+            return [];
+        }
+    }
+    
+    // Get user bandwidth usage history if available
+    public function getUserBandwidthHistory($username)
+    {
+        try {
+            // This assumes MikroTik has a feature to store/retrieve bandwidth history
+            // You may need to adapt this to your specific MikroTik configuration
+            $query = (new Query('/ip/hotspot/user/profile/print'))
+                ->where('name', $username);
+            
+            return $this->client->query($query)->read();
+        } catch (\Exception $e) {
+            \Log::error('Failed to get user bandwidth history: ' . $e->getMessage());
+            return [];
+        }
+    }
+    
+    // Helper function to format bandwidth from bytes to human-readable format
+    private function formatBandwidth($bytes)
+    {
+        $bytes = (int)$bytes;
+        
+        if ($bytes > 1000000) {
+            return round($bytes / 1000000, 2) . ' Mbps';
+        } elseif ($bytes > 1000) {
+            return round($bytes / 1000, 2) . ' Kbps';
+        } else {
+            return $bytes . ' bps';
+        }
+    }
 }
