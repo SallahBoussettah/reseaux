@@ -217,40 +217,7 @@
         </div>
     @endif
 
-    <!-- Step 1: User Info Form (shown by default) -->
-    @if (!session('user_info_submitted'))
-    <div id="userInfoForm" class="user-info-form">
-        <p class="verification-subtitle">{{ __('Please enter your information to continue') }}</p>
-        
-        <form method="POST" action="{{ route('submit.user.info') }}">
-            @csrf
-            
-            <div class="form-group">
-                <label for="full_name">{{ __('Full Name') }}</label>
-                <input type="text" id="full_name" name="full_name" required value="{{ old('full_name') }}">
-            </div>
-            
-            <div class="gender-section">
-                <label class="gender-label">{{ __('Gender') }}</label>
-                <div class="radio-group">
-                    <div class="radio-option">
-                        <input type="radio" id="male" name="gender" value="male" required {{ old('gender') == 'male' ? 'checked' : '' }}>
-                        <label for="male">{{ __('Male') }}</label>
-                    </div>
-                    <div class="radio-option">
-                        <input type="radio" id="female" name="gender" value="female" {{ old('gender') == 'female' ? 'checked' : '' }}>
-                        <label for="female">{{ __('Female') }}</label>
-                    </div>
-                </div>
-            </div>
-            
-            <button type="submit" class="btn-submit">
-                {{ __('Continue') }}
-            </button>
-        </form>
-    </div>
-    @else
-    <!-- Step 2: Token Verification Form (shown after user info is submitted) -->
+    <!-- Token Verification Form (always shown) -->
     <div id="tokenVerificationForm">
         <p class="verification-subtitle">{{ __('Please enter the 6-digit verification code') }}</p>
 
@@ -290,7 +257,6 @@
             </a>
         </form>
     </div>
-    @endif
 
     <!-- Keep the free access section as is -->
     @if(session('mac_address'))
