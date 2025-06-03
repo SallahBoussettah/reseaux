@@ -247,14 +247,14 @@ class MikroTikService
                     'username' => $username,
                     'mac_address' => $macAddress,
                     'ip_address' => $ipAddress,
-                    'rx_rate' => $txRate, 
-                    'tx_rate' => $rxRate, 
-                    'rx_rate_raw' => $txRateRaw,
-                    'tx_rate_raw' => $rxRateRaw,
-                    'bytes_in' => $bytesOut,
-                    'bytes_out' => $bytesIn,
-                    'bytes_in_formatted' => $bytesOutFormatted,
-                    'bytes_out_formatted' => $bytesInFormatted,
+                    'rx_rate' => $rxRate,
+                    'tx_rate' => $txRate,
+                    'rx_rate_raw' => $rxRateRaw,
+                    'tx_rate_raw' => $txRateRaw,
+                    'bytes_in' => $bytesIn,
+                    'bytes_out' => $bytesOut,
+                    'bytes_in_formatted' => $bytesInFormatted,
+                    'bytes_out_formatted' => $bytesOutFormatted,
                     'uptime' => $uptime,
                     'login_time' => $connection['login-by'] ?? 'unknown',
                     'session_id' => $connection['.id'] ?? null
@@ -300,7 +300,9 @@ class MikroTikService
     {
         $bytes = (int)$bytes;
         
-        if ($bytes > 1000000) {
+        if ($bytes === 0) {
+            return '0 bps';
+        } else if ($bytes > 1000000) {
             return round($bytes / 1000000, 2) . ' Mbps';
         } elseif ($bytes > 1000) {
             return round($bytes / 1000, 2) . ' Kbps';
