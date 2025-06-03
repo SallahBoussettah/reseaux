@@ -1,0 +1,15 @@
+# Session End Script for MikroTik
+# This script sends session data to the Laravel API when a user logs off
+
+:local mac $"mac-address"
+:local bytesIn $"bytes-in"
+:local bytesOut $"bytes-out"
+:local user $"user"
+
+:log info "User $user with MAC $mac logged off. Bytes in: $bytesIn, Bytes out: $bytesOut"
+
+/tool fetch url="https://yourserver.com/api/update-data-usage" \
+    http-method=post \
+    http-header-field="Content-Type: application/json" \
+    http-data="{\"mac_address\": \"$mac\", \"bytes_in\": $bytesIn, \"bytes_out\": $bytesOut}" \
+    keep-result=no 

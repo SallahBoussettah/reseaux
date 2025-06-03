@@ -183,6 +183,7 @@
                             <div class="card-body text-center">
                                 <h6 class="text-muted mb-2">Total Download</h6>
                                 <h2 class="mb-0 fw-bold text-primary">{{ $totalRxRateFormatted }}</h2>
+                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['downloaded'] }} total</p>
                                     </div>
                                 </div>
                                 </div>
@@ -191,6 +192,7 @@
                             <div class="card-body text-center">
                                 <h6 class="text-muted mb-2">Total Upload</h6>
                                 <h2 class="mb-0 fw-bold text-success">{{ $totalTxRateFormatted }}</h2>
+                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
                             </div>
                         </div>
                     </div>
@@ -204,6 +206,31 @@
                                     </div>
                                     <div class="text-success">
                                         <i class="uil uil-arrow-up"></i> {{ $averageTxRate }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Total Bandwidth Usage from Database -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h6 class="text-center mb-3">Total Bandwidth Usage (Cumulative from Database)</h6>
+                                <div class="d-flex justify-content-around">
+                                    <div class="text-center">
+                                        <h5 class="text-primary">Downloaded</h5>
+                                        <h3>{{ $formattedDatabaseTotals['downloaded'] }}</h3>
+                                    </div>
+                                    <div class="text-center">
+                                        <h5 class="text-success">Uploaded</h5>
+                                        <h3>{{ $formattedDatabaseTotals['uploaded'] }}</h3>
+                                    </div>
+                                    <div class="text-center">
+                                        <h5 class="text-info">Total</h5>
+                                        <h3>{{ $formattedDatabaseTotals['total'] }}</h3>
                                     </div>
                                 </div>
                             </div>
@@ -285,6 +312,61 @@
     
     <!-- Historical Data Section -->
     <div class="row mb-4">
+        <!-- Total Cumulative Data Usage -->
+        <div class="col-12 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0">Total Cumulative Data Usage</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3 mb-md-0">
+                            <div class="card border-0 bg-light h-100 metric-card">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted mb-2">Total Downloaded</h6>
+                                    <h2 class="mb-0 fw-bold text-primary">
+                                        @if(!empty($statistics) && $statistics->count() > 0)
+                                            {{ $statistics->first()->total_downloaded_formatted ?? '0 B' }}
+                                        @else
+                                            0 B
+                                        @endif
+                                    </h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3 mb-md-0">
+                            <div class="card border-0 bg-light h-100 metric-card">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted mb-2">Total Uploaded</h6>
+                                    <h2 class="mb-0 fw-bold text-success">
+                                        @if(!empty($statistics) && $statistics->count() > 0)
+                                            {{ $statistics->first()->total_uploaded_formatted ?? '0 B' }}
+                                        @else
+                                            0 B
+                                        @endif
+                                    </h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-0 bg-light h-100 metric-card">
+                                <div class="card-body text-center">
+                                    <h6 class="text-muted mb-2">Total Bandwidth Usage</h6>
+                                    <h2 class="mb-0 fw-bold text-dark">
+                                        @if(!empty($statistics) && $statistics->count() > 0)
+                                            {{ $statistics->first()->total_bandwidth_formatted ?? '0 B' }}
+                                        @else
+                                            0 B
+                                        @endif
+                                    </h2>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Daily Active Users Chart -->
         <div class="col-12 mb-4">
             <div class="card shadow-sm">
@@ -463,12 +545,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Format bandwidth for tooltips
 function formatBandwidth(bytes) {
-    if (bytes > 1000000) {
+    // Ensure bytes is treated as a number
+    bytes = Number(bytes);
+    
+    // Debug the incoming value
+    console.log('Formatting bandwidth value:', bytes);
+    
+    // Handle zero value case explicitly
+    if (bytes === 0 || isNaN(bytes)) {
+        return '0 bps';
+    } else if (bytes > 1000000) {
         return (bytes / 1000000).toFixed(2) + ' Mbps';
     } else if (bytes > 1000) {
         return (bytes / 1000).toFixed(2) + ' Kbps';
     } else {
-        return bytes + ' bps';
+        return Math.round(bytes) + ' bps';
     }
 }
 
@@ -675,15 +766,19 @@ let dailyOptions = {
 
     let bandwidthOptions = {
         series: [{
-            name: 'Utilisation de bande passante',
-            data: bandwidthUsage.map(user => user.data_usage)
+            name: 'Downloaded',
+            data: bandwidthUsage.map(user => user.total_downloaded_bytes)
+        }, {
+            name: 'Uploaded',
+            data: bandwidthUsage.map(user => user.total_uploaded_bytes)
         }],
         chart: {
             height: 350,
             type: 'bar',
             toolbar: { show: false },
             fontFamily: 'inherit',
-            animations: { enabled: false }
+            animations: { enabled: false },
+            stacked: false
         },
         plotOptions: {
             bar: {
@@ -693,11 +788,15 @@ let dailyOptions = {
                 distributed: false
             }
         },
-        colors: ['#2bcd72'],
+        colors: ['#4361ee', '#2bcd72'],
         dataLabels: {
             enabled: true,
-            formatter: function (val) {
-                return val + ' MB';
+            formatter: function (val, opt) {
+                // Return the formatted byte value
+                if (opt.w.globals.labels[opt.dataPointIndex]) {
+                    return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'downloaded_formatted' : 'uploaded_formatted'];
+                }
+                return val;
             },
             style: { fontSize: '12px' }
         },
@@ -710,10 +809,18 @@ let dailyOptions = {
         tooltip: {
             theme: 'light',
             y: {
-                formatter: function (val) {
-                    return val + ' MB';
+                formatter: function (val, opt) {
+                    // Return the formatted byte value
+                    if (opt.w.globals.labels[opt.dataPointIndex]) {
+                        return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'downloaded_formatted' : 'uploaded_formatted'];
+                    }
+                    return val;
                 }
             }
+        },
+        legend: {
+            position: 'top',
+            horizontalAlign: 'right'
         }
     };
     
@@ -813,8 +920,11 @@ let isAutoRefreshActive = false;
 function toggleAutoRefresh() {
     const autoRefreshBtn = document.getElementById('auto-refresh-btn');
     
+    console.log('Toggle auto-refresh. Current state:', isAutoRefreshActive);
+    
     if (isAutoRefreshActive) {
         // Stop auto-refresh
+        console.log('Stopping auto-refresh');
         clearInterval(autoRefreshInterval);
         autoRefreshBtn.innerHTML = '<i class="uil uil-play"></i> Démarrer l\'actualisation automatique';
         autoRefreshBtn.classList.remove('btn-danger');
@@ -823,50 +933,119 @@ function toggleAutoRefresh() {
         showNotification('Actualisation automatique désactivée', 'info');
     } else {
         // Start auto-refresh (every 10 seconds)
-        autoRefreshInterval = setInterval(refreshBandwidthData, 10000);
+        console.log('Starting auto-refresh every 10 seconds');
+        
+        // Immediate refresh
+        refreshBandwidthData();
+        
+        autoRefreshInterval = setInterval(() => {
+            console.log('Auto-refresh triggered at', new Date().toLocaleTimeString());
+            refreshBandwidthData();
+            
+            // Update database every 5 refreshes (50 seconds)
+            if (Math.floor(Date.now() / 10000) % 5 === 0) {
+                updateBandwidthUsageInDatabase();
+            }
+        }, 10000);
+        
         autoRefreshBtn.innerHTML = '<i class="uil uil-stop"></i> Arrêter l\'actualisation automatique';
         autoRefreshBtn.classList.remove('btn-outline-success');
         autoRefreshBtn.classList.add('btn-danger');
         isAutoRefreshActive = true;
         showNotification('Actualisation automatique activée (10 secondes)', 'success');
         
-        // Refresh immediately when auto-refresh is started
-        refreshBandwidthData();
+        // Update database when auto-refresh is started
+        updateBandwidthUsageInDatabase();
     }
 }
 
 // Function to show a notification
 function showNotification(message, type = 'success', duration = 3000) {
-    const alertElement = document.createElement('div');
-    alertElement.classList.add('alert', `alert-${type}`, 'alert-dismissible', 'fade', 'show', 'mt-3');
+    // Create or get the single toast container
+    let toastContainer = document.getElementById('toast-notification-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-notification-container';
+        toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+        toastContainer.style.zIndex = '1050';
+        document.body.appendChild(toastContainer);
+    }
     
+    // Remove ALL existing toasts
+    const existingToasts = toastContainer.querySelectorAll('.toast');
+    existingToasts.forEach(toast => {
+        if (toast && toast.classList.contains('show')) {
+            const toastInstance = bootstrap.Toast.getInstance(toast);
+            if (toastInstance) {
+                toastInstance.hide();
+            }
+        }
+        // Remove immediately to prevent stacking
+        toast.remove();
+    });
+    
+    // Create a unique ID for this toast
+    const toastId = 'toast-' + Date.now();
+    
+    // Set the appropriate icon based on notification type
     let icon = 'uil-check-circle';
+    let spinnerClass = '';
+    
     if (type === 'danger') {
         icon = 'uil-exclamation-triangle';
     } else if (type === 'warning') {
         icon = 'uil-exclamation-circle';
     } else if (type === 'info') {
         icon = 'uil-info-circle';
+        spinnerClass = 'spinner-border spinner-border-sm text-primary me-2';
     }
     
-    alertElement.innerHTML = `
-        <div class="d-flex align-items-center">
-            <i class="uil ${icon} me-2 fs-5"></i>
-            <div>${message}</div>
-            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+    // Create the toast element
+    const toastElement = document.createElement('div');
+    toastElement.id = toastId;
+    toastElement.className = 'toast mb-2';
+    toastElement.setAttribute('role', 'alert');
+    toastElement.setAttribute('aria-live', 'assertive');
+    toastElement.setAttribute('aria-atomic', 'true');
+    
+    // Set toast HTML content with a consistent header
+    toastElement.innerHTML = `
+        <div class="toast-header">
+            <strong class="me-auto">Information</strong>
+            <small class="text-muted">${new Date().toLocaleTimeString()}</small>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">
+            <div class="d-flex align-items-center">
+                ${spinnerClass ? `<div class="${spinnerClass}" role="status"><span class="visually-hidden">Loading...</span></div>` : ''}
+                <i class="uil ${icon} me-2 fs-5 ${type === 'success' ? 'text-success' : type === 'danger' ? 'text-danger' : type === 'warning' ? 'text-warning' : 'text-info'} ${!spinnerClass ? '' : 'd-none'}"></i>
+                <span>${message}</span>
+            </div>
         </div>
     `;
     
-    const container = document.getElementById('bandwidth-content');
-    if (container) {
-        container.prepend(alertElement);
-        
-        // Auto-dismiss the alert
+    // Add the toast to the container
+    toastContainer.appendChild(toastElement);
+    
+    // Initialize and show the toast using Bootstrap's Toast API
+    const toastInstance = new bootstrap.Toast(toastElement, {
+        autohide: true,
+        delay: duration
+    });
+    
+    toastInstance.show();
+    
+    // Remove the toast element after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', function() {
         setTimeout(() => {
-            alertElement.classList.remove('show');
-            setTimeout(() => alertElement.remove(), 150);
-        }, duration);
-    }
+            toastElement.remove();
+            
+            // Remove the container if it's empty
+            if (toastContainer.children.length === 0) {
+                toastContainer.remove();
+            }
+        }, 150);
+    });
 }
 
 // Function to refresh bandwidth data via AJAX
@@ -886,15 +1065,28 @@ function refreshBandwidthData() {
     
     // Create a controller to be able to abort the fetch request if it takes too long
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout - reduced from 10s
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout - increased from 5s for more reliable data
     
-    // Fetch updated data from server with force_refresh=1 to bypass cache if needed
-    fetch('{{ route('bandwidth.data') }}' + (isAutoRefreshActive ? '' : '?force_refresh=1'), {
+    // Debug timestamp to ensure we're not getting cached data
+    const timestamp = new Date().getTime();
+    console.log('Refreshing bandwidth data at:', new Date().toLocaleTimeString());
+    
+    // Check if we're in local development and should use mock data
+    const useMockData = {{ app()->environment('local') ? 'true' : 'false' }};
+    const url = '{{ route('bandwidth.data') }}' + 
+                '?force_refresh=1' + 
+                '&_=' + timestamp + 
+                (useMockData ? '&use_mock_data=1' : '');
+    
+    // Always force refresh to bypass cache
+    fetch(url, {
         signal: controller.signal,
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json',
-            'Cache-Control': 'no-cache' // Prevent browser caching
+            'Cache-Control': 'no-cache, no-store, must-revalidate', // Stronger cache prevention
+            'Pragma': 'no-cache',
+            'Expires': '0'
         }
     })
     .then(response => {
@@ -905,6 +1097,9 @@ function refreshBandwidthData() {
         return response.json();
     })
     .then(data => {
+        // Debug the received data
+        console.log('Received bandwidth data:', data);
+        
         // Re-enable refresh button
         if (refreshBtn) {
             refreshBtn.disabled = false;
@@ -914,10 +1109,38 @@ function refreshBandwidthData() {
         if (data.success) {
             // Display appropriate notifications based on data source
             if (data.fromCache) {
-                showNotification('Utilisation des données en cache: ' + data.cacheReason, 'info', 5000);
+                showNotification('Utilisation des données en cache: ' + (data.cacheReason || 'Données récentes disponibles'), 'info', 3000);
+            } else if (data.fromFallback) {
+                showNotification('Utilisation des données de secours: ' + (data.fallbackReason || 'Problème de connexion au routeur'), 'warning', 5000);
+                document.querySelector('h5.mb-0').innerHTML = 'Utilisation de la bande passante (DONNÉES DE SECOURS)';
+            } else if (data.source === 'mock') {
+                showNotification('Utilisation de données simulées pour le développement local', 'info', 3000);
+                document.querySelector('h5.mb-0').innerHTML = 'Utilisation de la bande passante (DONNÉES SIMULÉES)';
+            } else if (data.source === 'interface_fallback') {
+                showNotification('Données directes des interfaces réseau', 'info', 3000);
+                document.querySelector('h5.mb-0').innerHTML = 'Utilisation de la bande passante (INTERFACES RÉSEAU)';
             } else {
                 // Make sure we're in normal mode, not demo mode
                 document.querySelector('h5.mb-0').innerHTML = 'Utilisation de la bande passante en temps réel';
+            }
+            
+            // Update the page header to show data source and timestamp
+            const header = document.querySelector('h5.mb-0');
+            if (header) {
+                const lastUpdated = new Date(data.timestamp * 1000).toLocaleTimeString();
+                let sourceText = '';
+                
+                if (data.source === 'mock') {
+                    sourceText = ' (SIMULATION)';
+                } else if (data.source === 'interface_fallback') {
+                    sourceText = ' (INTERFACES)';
+                } else if (data.fromCache) {
+                    sourceText = ' (CACHE)';
+                } else if (data.fromFallback) {
+                    sourceText = ' (SECOURS)';
+                }
+                
+                header.innerHTML = `Utilisation de la bande passante en temps réel${sourceText} <small class="text-muted">(Mise à jour: ${lastUpdated})</small>`;
             }
             
             // Update statistics cards without animation for speed
@@ -926,40 +1149,48 @@ function refreshBandwidthData() {
                 activeUsersElement.textContent = data.activeUsers;
             }
             
-            // Update the other metrics
-            const elements = document.querySelectorAll('.card-body h2');
-            if (elements.length > 2) {
-                elements[1].textContent = data.totalRx;
-                elements[2].textContent = data.totalTx;
-                
-                // Add total bytes information if available
-                if (data.totalRxBytes) {
-                    const totalRxElement = document.querySelectorAll('.card-body h2')[1];
-                    if (totalRxElement) {
-                        totalRxElement.innerHTML = `${data.totalRx}<small class="d-block text-muted fs-6 mt-1">${data.totalRxBytes} total</small>`;
+            // Update the total download and upload metrics
+            const metricCards = document.querySelectorAll('.metric-card');
+            if (metricCards.length >= 4) {
+                // Update Total Download (second card)
+                const totalDownloadCard = metricCards[1];
+                const totalDownloadValue = totalDownloadCard.querySelector('h2');
+                if (totalDownloadValue) {
+                    console.log('Setting download value to:', data.totalRx);
+                    totalDownloadValue.innerHTML = data.totalRx || '0 bps';
+                    if (data.totalRxBytes) {
+                        const smallText = totalDownloadCard.querySelector('p.small');
+                        if (smallText) {
+                            smallText.textContent = data.totalRxBytes + ' total';
+                        }
                     }
                 }
                 
-                if (data.totalTxBytes) {
-                    const totalTxElement = document.querySelectorAll('.card-body h2')[2];
-                    if (totalTxElement) {
-                        totalTxElement.innerHTML = `${data.totalTx}<small class="d-block text-muted fs-6 mt-1">${data.totalTxBytes} total</small>`;
+                // Update Total Upload (third card)
+                const totalUploadCard = metricCards[2];
+                const totalUploadValue = totalUploadCard.querySelector('h2');
+                if (totalUploadValue) {
+                    console.log('Setting upload value to:', data.totalTx);
+                    totalUploadValue.innerHTML = data.totalTx || '0 bps';
+                    if (data.totalTxBytes) {
+                        const smallText = totalUploadCard.querySelector('p.small');
+                        if (smallText) {
+                            smallText.textContent = data.totalTxBytes + ' total';
+                        }
                     }
                 }
-            }
-            
-            // Make sure the average values are displayed properly
-            const averageContainer = document.querySelector('.card-body .d-flex.justify-content-center.align-items-center');
-            if (averageContainer) {
-                const rxElement = averageContainer.querySelector('.text-primary');
-                const txElement = averageContainer.querySelector('.text-success');
                 
-                if (rxElement) rxElement.innerHTML = `<i class="uil uil-arrow-down"></i> ${data.averageRx}`;
-                if (txElement) txElement.innerHTML = `<i class="uil uil-arrow-up"></i> ${data.averageTx}`;
-            } else {
-                // If the container doesn't exist, find the parent and create it
-                const averageCard = document.querySelectorAll('.metric-card')[3];
-                if (averageCard) {
+                // Update Average per user (fourth card)
+                const averageCard = metricCards[3];
+                const averageContainer = averageCard.querySelector('.d-flex');
+                if (averageContainer) {
+                    const rxElement = averageContainer.querySelector('.text-primary');
+                    const txElement = averageContainer.querySelector('.text-success');
+                    
+                    if (rxElement) rxElement.innerHTML = `<i class="uil uil-arrow-down"></i> ${data.averageRx || '0 bps'}`;
+                    if (txElement) txElement.innerHTML = `<i class="uil uil-arrow-up"></i> ${data.averageTx || '0 bps'}`;
+                } else {
+                    // If the container doesn't exist, create it
                     const cardBody = averageCard.querySelector('.card-body');
                     if (cardBody) {
                         const header = cardBody.querySelector('h6');
@@ -968,10 +1199,10 @@ function refreshBandwidthData() {
                             container.className = 'd-flex justify-content-center align-items-center';
                             container.innerHTML = `
                                 <div class="text-primary me-3">
-                                    <i class="uil uil-arrow-down"></i> ${data.averageRx}
+                                    <i class="uil uil-arrow-down"></i> ${data.averageRx || '0 bps'}
                                 </div>
                                 <div class="text-success">
-                                    <i class="uil uil-arrow-up"></i> ${data.averageTx}
+                                    <i class="uil uil-arrow-up"></i> ${data.averageTx || '0 bps'}
                                 </div>
                             `;
                             
@@ -986,24 +1217,46 @@ function refreshBandwidthData() {
                 }
             }
             
+            // Update the database totals section
+            const databaseTotalsSection = document.querySelector('.card-body .d-flex.justify-content-around');
+            if (databaseTotalsSection && data.databaseTotals) {
+                const totals = databaseTotalsSection.querySelectorAll('h3');
+                if (totals.length >= 3) {
+                    totals[0].textContent = data.databaseTotals.downloaded || totals[0].textContent;
+                    totals[1].textContent = data.databaseTotals.uploaded || totals[1].textContent;
+                    totals[2].textContent = data.databaseTotals.total || totals[2].textContent;
+                }
+            }
+            
             // Update chart data - if chart exists and we have data
             if (window.realTimeBandwidthChart && data.labels && data.labels.length > 0) {
-                realTimeBandwidthChart.updateOptions({
-                    xaxis: {
-                        categories: data.labels
-                    }
-                });
+                // Check if we have valid numeric data
+                const hasValidData = data.rxData && data.txData && 
+                                   data.rxData.every(val => !isNaN(parseFloat(val))) && 
+                                   data.txData.every(val => !isNaN(parseFloat(val)));
                 
-                realTimeBandwidthChart.updateSeries([
-                    {
-                        name: 'Download (Rx)',
-                        data: data.rxData
-                    },
-                    {
-                        name: 'Upload (Tx)',
-                        data: data.txData
-                    }
-                ]);
+                if (hasValidData) {
+                    // Update the chart
+                    realTimeBandwidthChart.updateOptions({
+                        xaxis: {
+                            categories: data.labels
+                        }
+                    });
+                    
+                    realTimeBandwidthChart.updateSeries([
+                        {
+                            name: 'Download (Rx)',
+                            data: data.rxData
+                        },
+                        {
+                            name: 'Upload (Tx)',
+                            data: data.txData
+                        }
+                    ]);
+                } else {
+                    console.warn('Invalid chart data received:', data.rxData, data.txData);
+                    chartElement.innerHTML = '<div class="alert alert-warning text-center my-4">Données de bande passante invalides reçues du serveur</div>';
+                }
             } else if (chartElement && data.labels && data.labels.length > 0) {
                 // If chart doesn't exist yet but we have data, create it
                 realTimeBandwidthData = {
@@ -1025,7 +1278,7 @@ function refreshBandwidthData() {
             
             // Update table
             const tableBody = document.querySelector('table tbody');
-            if (tableBody) {
+            if (tableBody && data.connections) {
                 tableBody.innerHTML = '';
                 
                 if (data.connections && data.connections.length > 0) {
@@ -1054,22 +1307,28 @@ function refreshBandwidthData() {
             
             // Calculate total bandwidth for gauge charts
             if (data.rxData && data.txData && window.downloadGaugeChart && window.uploadGaugeChart) {
-                const totalRxRateRaw = data.rxData.reduce((sum, val) => sum + val, 0);
-                const totalTxRateRaw = data.txData.reduce((sum, val) => sum + val, 0);
-                const maxNetworkSpeed = 1000 * 1000000; // 1 Gbps in bps (changed from 100 Mbps)
+                // Make sure we have valid data
+                const validRxData = data.rxData.filter(val => !isNaN(parseFloat(val)));
+                const validTxData = data.txData.filter(val => !isNaN(parseFloat(val)));
                 
-                // Calculate percentage of network capacity
-                const downloadPercentage = Math.min(100, (totalRxRateRaw / maxNetworkSpeed) * 100);
-                const uploadPercentage = Math.min(100, (totalTxRateRaw / maxNetworkSpeed) * 100);
-                
-                // Update the gauge charts
-                window.downloadGaugeChart.updateSeries([downloadPercentage]);
-                window.uploadGaugeChart.updateSeries([uploadPercentage]);
+                if (validRxData.length > 0 && validTxData.length > 0) {
+                    const totalRxRateRaw = validRxData.reduce((sum, val) => sum + parseFloat(val), 0);
+                    const totalTxRateRaw = validTxData.reduce((sum, val) => sum + parseFloat(val), 0);
+                    const maxNetworkSpeed = 1000 * 1000000; // 1 Gbps in bps
+                    
+                    // Calculate percentage of network capacity
+                    const downloadPercentage = Math.min(100, (totalRxRateRaw / maxNetworkSpeed) * 100);
+                    const uploadPercentage = Math.min(100, (totalTxRateRaw / maxNetworkSpeed) * 100);
+                    
+                    // Update the gauge charts
+                    window.downloadGaugeChart.updateSeries([downloadPercentage]);
+                    window.uploadGaugeChart.updateSeries([uploadPercentage]);
+                }
             }
             
             // Show success message only for live data
-            if (!data.fromCache) {
-                showNotification(`Données mises à jour à ${new Date().toLocaleTimeString()}`);
+            if (!data.fromCache && !data.fromFallback && data.source !== 'mock') {
+                showNotification(`Données en temps réel mises à jour à ${new Date().toLocaleTimeString()}`);
             }
         } else {
             throw new Error(data.message || 'Une erreur inconnue est survenue');
@@ -1110,5 +1369,79 @@ function animateValue(obj, start, end, duration) {
     // Just set the value directly for speed
     if (obj) obj.textContent = end;
 }
+
+// Function to update bandwidth usage in database
+function updateBandwidthUsageInDatabase() {
+    // Show a subtle notification that we're updating the database
+    showNotification('Mise à jour des données de bande passante dans la base de données...', 'info', 2000);
+    
+    // Fetch to update bandwidth usage in the database
+    fetch('{{ route('update.bandwidth.usage') }}', {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Réponse réseau non valide: ' + response.status);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showNotification('Données de bande passante mises à jour dans la base de données', 'success');
+            
+            // Refresh the page data to show updated totals
+            setTimeout(() => {
+                refreshBandwidthData();
+            }, 1000);
+        } else {
+            throw new Error(data.message || 'Une erreur est survenue lors de la mise à jour des données');
+        }
+    })
+    .catch(error => {
+        console.error('Error updating bandwidth usage:', error);
+        showNotification('Erreur lors de la mise à jour des données: ' + error.message, 'danger', 5000);
+    });
+}
+
+// Add event listener to the auto-refresh button
+document.addEventListener('DOMContentLoaded', function() {
+    const autoRefreshBtn = document.getElementById('auto-refresh-btn');
+    if (autoRefreshBtn) {
+        autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
+    }
+    
+    // Add a dedicated button for database updates
+    const refreshBtnContainer = document.querySelector('.d-flex');
+    if (refreshBtnContainer) {
+        const updateDbBtn = document.createElement('button');
+        updateDbBtn.id = 'update-db-btn';
+        updateDbBtn.className = 'btn btn-sm btn-outline-primary';
+        updateDbBtn.innerHTML = '<i class="uil uil-database"></i> Mettre à jour la BD';
+        updateDbBtn.addEventListener('click', updateBandwidthUsageInDatabase);
+        refreshBtnContainer.appendChild(updateDbBtn);
+    }
+    
+    // Set up automatic database updates every 30 seconds, independent of auto-refresh
+    // This will run regardless of whether auto-refresh is enabled
+    const dbUpdateInterval = 30000; // 30 seconds
+    
+    // Initial update when page loads
+    setTimeout(() => {
+        updateBandwidthUsageInDatabase();
+        
+        // Set up recurring updates
+        setInterval(() => {
+            console.log('Automatic database update triggered');
+            updateBandwidthUsageInDatabase();
+        }, dbUpdateInterval);
+        
+        // Show a notification that automatic updates are enabled
+        showNotification('Mise à jour automatique de la base de données toutes les 30 secondes', 'info', 10000);
+    }, 5000); // Wait 5 seconds after page load before starting
+});
 </script>
 @endsection

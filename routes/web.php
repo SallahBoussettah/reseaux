@@ -59,6 +59,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/clients/{id}/deactivate', [DashboardController::class, 'deactivateUser'])->name('clients.deactivate');
     Route::get('/statistics', [DashboardController::class, 'statistics'])->name('statistics');
     Route::get('/bandwidth-data', [DashboardController::class, 'getBandwidthData'])->name('bandwidth.data');
+    Route::get('/update-bandwidth-usage', [DashboardController::class, 'updateBandwidthUsage'])->name('update.bandwidth.usage');
     Route::get('/clients/export', [DashboardController::class, 'exportClients'])->name('clients.export');
     Route::post('/ban-user', [DashboardController::class, 'banUser']);
     

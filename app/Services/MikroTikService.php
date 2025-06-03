@@ -247,14 +247,14 @@ class MikroTikService
                     'username' => $username,
                     'mac_address' => $macAddress,
                     'ip_address' => $ipAddress,
-                    'rx_rate' => $rxRate,       // Download speed
-                    'tx_rate' => $txRate,       // Upload speed
-                    'rx_rate_raw' => $rxRateRaw,  // Raw value for calculations
-                    'tx_rate_raw' => $txRateRaw,  // Raw value for calculations
-                    'bytes_in' => $bytesIn,       // Total bytes downloaded
-                    'bytes_out' => $bytesOut,     // Total bytes uploaded
-                    'bytes_in_formatted' => $bytesInFormatted, // Formatted bytes downloaded
-                    'bytes_out_formatted' => $bytesOutFormatted, // Formatted bytes uploaded
+                    'rx_rate' => $txRate, 
+                    'tx_rate' => $rxRate, 
+                    'rx_rate_raw' => $txRateRaw,
+                    'tx_rate_raw' => $rxRateRaw,
+                    'bytes_in' => $bytesOut,
+                    'bytes_out' => $bytesIn,
+                    'bytes_in_formatted' => $bytesOutFormatted,
+                    'bytes_out_formatted' => $bytesInFormatted,
                     'uptime' => $uptime,
                     'login_time' => $connection['login-by'] ?? 'unknown',
                     'session_id' => $connection['.id'] ?? null
@@ -322,6 +322,47 @@ class MikroTikService
             return round($bytes / 1024, 2) . ' KB'; // Convert to kilobytes
         } else {
             return $bytes . ' B'; // Bytes
+        }
+    }
+    
+    /**
+     * Get accounting data from MikroTik router
+     * This retrieves historical bandwidth usage data
+     * 
+     * @return array
+     */
+    public function getAccountingData()
+    {
+        try {
+            // First check if the connection is working
+            if (!$this->testConnection()) {
+                throw new \Exception("Cannot establish connection to MikroTik router");
+            }
+            
+            \Log::info('Fetching accounting data from MikroTik');
+            
+            // Query to get accounting data
+            $query = (new Query('/ip/accounting/snapshot/print'));
+            $accountingData = $this->client->query($query)->read();
+            
+            if (empty($accountingData)) {
+                \Log::info('No accounting data found on MikroTik router');
+                
+                // Try to get data from hotspot user stats instead
+                $query = (new Query('/ip/hotspot/user/print'));
+                $userStats = $this->client->query($query)->read();
+                
+                \Log::info('Found ' . count($userStats) . ' user stats records on MikroTik router');
+                return $userStats;
+            }
+            
+            \Log::info('Found ' . count($accountingData) . ' accounting records on MikroTik router');
+            return $accountingData;
+            
+        } catch (\Exception $e) {
+            \Log::error('Failed to get accounting data: ' . $e->getMessage());
+            \Log::error('Exception details: ' . $e->getTraceAsString());
+            return [];
         }
     }
 }

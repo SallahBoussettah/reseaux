@@ -427,34 +427,28 @@ class ClientController extends Controller
     }
 
     
-    public function updateDataUsage($macAddress)
+    public function updateDataUsage(Request $request)
     {
-        // Connect to MikroTik API
-        $mikrotikClient = new RouterOSAPI([
-            'host' => '192.168.88.1',
-            'user' => 'api',
-            'pass' => 'admin',
-            'port' => 8728,
-            'timeout' => 30,
+        $validated = $request->validate([
+            'mac_address' => 'required|string',
+            'bytes_in' => 'required|numeric',
+            'bytes_out' => 'required|numeric',
         ]);
 
-        // Fetch the active session for the user by MAC address
-        $query = new Query('/ip/hotspot/active/print');
-        $query->where('mac-address', $macAddress);
-        $activeSession = $mikrotikClient->query($query)->read();
+        $client = Client::where('mac_address', $validated['mac_address'])->first();
 
-        if (!empty($activeSession)) {
-            $bytes_in = $activeSession[0]['bytes-in'];  // Data downloaded by the user
-            $bytes_out = $activeSession[0]['bytes-out']; // Data uploaded by the user
-            $total_bytes = $bytes_in + $bytes_out;  // Total data usage in bytes
-
-            // Update the user's data usage in the database
-            $client = Client::where('mac_address', $macAddress)->first();
-            if ($client) {
-                $client->data_usage += $total_bytes;
-                $client->save();
-            }
+        if ($client) {
+            // Use increment to avoid race conditions
+            $client->increment('total_downloaded_bytes', $validated['bytes_in']);
+            $client->increment('total_uploaded_bytes', $validated['bytes_out']);
+            
+            // Log the update
+            Log::info("Updated data usage for client {$client->id} with MAC {$validated['mac_address']}. Added {$validated['bytes_in']} downloaded bytes and {$validated['bytes_out']} uploaded bytes.");
+            
+            return response()->json(['success' => true, 'message' => 'Data usage updated successfully']);
         }
+
+        return response()->json(['success' => false, 'message' => 'Client not found'], 404);
     }
 
     /**

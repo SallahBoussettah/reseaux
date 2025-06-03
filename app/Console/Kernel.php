@@ -29,6 +29,10 @@ class Kernel extends ConsoleKernel
         // Schedule the user banning check to run every minute (for testing)
         // Later this can be changed to run every hour or daily
         $schedule->command('users:ban-scheduled')->everyMinute();
+        
+        // Schedule the bandwidth usage update to run every minute
+        // This ensures the database is always up-to-date with the latest bandwidth usage
+        $schedule->command('bandwidth:update')->everyMinute();
     }
 
     /**
