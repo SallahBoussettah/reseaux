@@ -270,6 +270,22 @@
                 
                 <!-- Network load gauges -->
                 <div class="row mb-4">
+                    <div class="col-12 mb-3">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body py-2">
+                                <div class="d-flex justify-content-end align-items-center">
+                                    <label for="networkCapacity" class="me-2 mb-0">Capacité maximale:</label>
+                                    <select id="networkCapacity" class="form-select form-select-sm" style="width: auto;">
+                                        <option value="50">50 Mbps</option>
+                                        <option value="100" selected>100 Mbps</option>
+                                        <option value="200">200 Mbps</option>
+                                        <option value="500">500 Mbps</option>
+                                        <option value="1000">1 Gbps</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="col-md-6 mb-4 mb-md-0">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body">
@@ -510,6 +526,69 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Set up network capacity dropdown
+    const networkCapacitySelect = document.getElementById('networkCapacity');
+    if (networkCapacitySelect) {
+        // Set initial value from localStorage if available
+        const savedCapacity = localStorage.getItem('networkCapacity');
+        if (savedCapacity) {
+            networkCapacitySelect.value = savedCapacity;
+        }
+        
+        networkCapacitySelect.addEventListener('change', function() {
+            // Get the new capacity value
+            const capacityMbps = parseInt(this.value, 10);
+            
+            // Store the value in localStorage for persistence
+            localStorage.setItem('networkCapacity', capacityMbps);
+            
+            // Force refresh the data to update the gauge charts
+            refreshBandwidthData();
+            
+            // Show notification
+            showNotification(`Capacité maximale mise à jour à ${capacityMbps} Mbps`, 'info');
+        });
+    }
+    
+    // Add event listeners for refresh rate dropdown items
+    const refreshRateItems = document.querySelectorAll('.refresh-rate');
+    if (refreshRateItems.length > 0) {
+        refreshRateItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Get the new refresh rate
+                const newRate = parseInt(this.getAttribute('data-rate'), 10);
+                refreshRate = newRate;
+                
+                // Update the displayed rate
+                document.getElementById('current-refresh-rate').textContent = newRate + 's';
+                
+                // Update active class
+                refreshRateItems.forEach(ri => ri.classList.remove('active'));
+                this.classList.add('active');
+                
+                // If auto-refresh is active, restart it with the new rate
+                if (isAutoRefreshActive) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = setInterval(refreshBandwidthData, refreshRate * 1000);
+                    showNotification(`Taux d'actualisation modifié à ${refreshRate} secondes`, 'info');
+                }
+            });
+        });
+    }
+    
+    // Add a dedicated button for database updates
+    const refreshBtnContainer = document.querySelector('.d-flex');
+    if (refreshBtnContainer) {
+        const updateDbBtn = document.createElement('button');
+        updateDbBtn.id = 'update-db-btn';
+        updateDbBtn.className = 'btn btn-sm btn-outline-primary ms-2';
+        updateDbBtn.innerHTML = '<i class="uil uil-database"></i> Mettre à jour la BD';
+        updateDbBtn.addEventListener('click', updateBandwidthUsageInDatabase);
+        refreshBtnContainer.appendChild(updateDbBtn);
+    }
+    
     // Progressively load content - Critical content first, then everything else with delays
     
     // Phase 1: Load the critical section first (the active users table and cards)
@@ -532,6 +611,24 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 500);
         }, 100);
     }, 0);
+    
+    // Set up automatic database updates every 30 seconds, independent of auto-refresh
+    // This will run regardless of whether auto-refresh is enabled
+    const dbUpdateInterval = 30000; // 30 seconds
+    
+    // Initial update when page loads
+    setTimeout(() => {
+        updateBandwidthUsageInDatabase();
+        
+        // Set up recurring updates
+        setInterval(() => {
+            console.log('Automatic database update triggered');
+            updateBandwidthUsageInDatabase();
+        }, dbUpdateInterval);
+        
+        // Show a notification that automatic updates are enabled
+        showNotification('Mise à jour automatique de la base de données toutes les 30 secondes', 'info', 10000);
+    }, 5000); // Wait 5 seconds after page load before starting
 });
 
 // Format bandwidth for tooltips
@@ -557,7 +654,8 @@ function formatBandwidth(bytes) {
 // Split chart initialization into phases for faster loading
 function initializePrimaryCharts() {
     // Initialize only the gauge charts first - they're simple and lightweight
-    const maxNetworkSpeed = 1000 * 1000000; // 1 Gbps in bps (changed from 100 Mbps)
+    const networkCapacityMbps = parseInt(document.getElementById('networkCapacity').value, 10);
+    const maxNetworkSpeed = networkCapacityMbps * 1000000; // Convert Mbps to bps
     const totalRxRateRaw = {{ array_sum(array_column($activeConnections, 'rx_rate_raw') ?: [0]) }};
     const totalTxRateRaw = {{ array_sum(array_column($activeConnections, 'tx_rate_raw') ?: [0]) }};
     
@@ -1291,11 +1389,14 @@ function refreshBandwidthData() {
                 const totalRxRateRaw = data.debug.bandwidth_raw.rx || 0;
                 const totalTxRateRaw = data.debug.bandwidth_raw.tx || 0;
                 
-                // Get network capacity from bandwidth_capacity if available, or use 1 Gbps as default
-                const maxNetworkSpeed = (data.debug && data.debug.bandwidth_capacity) ? 
-                    data.debug.bandwidth_capacity : 1000 * 1000000; // 1 Gbps in bps
+                // Get the selected network capacity from the dropdown
+                const networkCapacitySelect = document.getElementById('networkCapacity');
+                const networkCapacityMbps = networkCapacitySelect ? parseInt(networkCapacitySelect.value, 10) : 100;
                 
-                console.log(`Network bandwidth metrics - Download: ${totalRxRateRaw} bps, Upload: ${totalTxRateRaw} bps, Max Capacity: ${maxNetworkSpeed} bps`);
+                // Calculate max network speed in bps
+                const maxNetworkSpeed = networkCapacityMbps * 1000000; // Convert Mbps to bps
+                
+                console.log(`Network bandwidth metrics - Download: ${totalRxRateRaw} bps, Upload: ${totalTxRateRaw} bps, Max Capacity: ${maxNetworkSpeed} bps (${networkCapacityMbps} Mbps)`);
                 
                 // Calculate percentage of network capacity (max 100%)
                 const downloadPercentage = Math.min(100, Math.max(0, (totalRxRateRaw / maxNetworkSpeed) * 100));
@@ -1475,71 +1576,6 @@ function updateBandwidthUsageInDatabase() {
         showNotification('Erreur lors de la mise à jour des données: ' + error.message, 'danger', 5000);
     });
 }
-
-// Add event listener to the auto-refresh button
-document.addEventListener('DOMContentLoaded', function() {
-    const autoRefreshBtn = document.getElementById('auto-refresh-btn');
-    if (autoRefreshBtn) {
-        autoRefreshBtn.addEventListener('click', toggleAutoRefresh);
-    }
-    
-    // Add event listeners for refresh rate dropdown items
-    const refreshRateItems = document.querySelectorAll('.refresh-rate');
-    if (refreshRateItems.length > 0) {
-        refreshRateItems.forEach(item => {
-            item.addEventListener('click', function(e) {
-                e.preventDefault();
-                
-                // Get the new refresh rate
-                const newRate = parseInt(this.getAttribute('data-rate'), 10);
-                refreshRate = newRate;
-                
-                // Update the displayed rate
-                document.getElementById('current-refresh-rate').textContent = newRate + 's';
-                
-                // Update active class
-                refreshRateItems.forEach(ri => ri.classList.remove('active'));
-                this.classList.add('active');
-                
-                // If auto-refresh is active, restart it with the new rate
-                if (isAutoRefreshActive) {
-                    clearInterval(autoRefreshInterval);
-                    autoRefreshInterval = setInterval(refreshBandwidthData, refreshRate * 1000);
-                    showNotification(`Taux d'actualisation modifié à ${refreshRate} secondes`, 'info');
-                }
-            });
-        });
-    }
-    
-    // Add a dedicated button for database updates
-    const refreshBtnContainer = document.querySelector('.d-flex');
-    if (refreshBtnContainer) {
-        const updateDbBtn = document.createElement('button');
-        updateDbBtn.id = 'update-db-btn';
-        updateDbBtn.className = 'btn btn-sm btn-outline-primary ms-2';
-        updateDbBtn.innerHTML = '<i class="uil uil-database"></i> Mettre à jour la BD';
-        updateDbBtn.addEventListener('click', updateBandwidthUsageInDatabase);
-        refreshBtnContainer.appendChild(updateDbBtn);
-    }
-    
-    // Set up automatic database updates every 30 seconds, independent of auto-refresh
-    // This will run regardless of whether auto-refresh is enabled
-    const dbUpdateInterval = 30000; // 30 seconds
-    
-    // Initial update when page loads
-    setTimeout(() => {
-        updateBandwidthUsageInDatabase();
-        
-        // Set up recurring updates
-        setInterval(() => {
-            console.log('Automatic database update triggered');
-            updateBandwidthUsageInDatabase();
-        }, dbUpdateInterval);
-        
-        // Show a notification that automatic updates are enabled
-        showNotification('Mise à jour automatique de la base de données toutes les 30 secondes', 'info', 10000);
-    }, 5000); // Wait 5 seconds after page load before starting
-});
 
 // Initialize tooltips
 const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
