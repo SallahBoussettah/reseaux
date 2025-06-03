@@ -409,31 +409,31 @@ class DashboardController extends Controller
     public function getBandwidthData()
     {
         try {
-            // Check if we have a cached version (cache for 5 seconds to prevent hammering the router)
+            // Only check for cached data if not forcing a refresh
             if (Cache::has('bandwidth_data') && !request()->has('force_refresh')) {
-                return response()->json(Cache::get('bandwidth_data'));
-            }
-            
-            // Check if we should use mock data for local development
-            if (env('APP_ENV') === 'local' && request()->has('use_mock_data')) {
-                return response()->json($this->getMockBandwidthData());
+                $cachedData = Cache::get('bandwidth_data');
+                $cachedData['from_cache'] = true;
+                $cachedData['cache_time'] = date('H:i:s', Cache::get('bandwidth_data_timestamp', time()));
+                return response()->json($cachedData);
             }
             
             // Debug information about the connection
             $host = env('MIKROTIK_HOST', 'eurekadigital.ddns.net');
             $port = (int)env('MIKROTIK_PORT', 8728);
             $user = env('MIKROTIK_USER', 'api');
+            $pass = env('MIKROTIK_PASS', 'Erekapp314');
             
-            // Log connection attempt
+            // Enhanced logging for connection debugging
             \Log::info("Attempting to connect to MikroTik at {$host}:{$port} with user {$user}");
+            \Log::info("Connection parameters: Host={$host}, Port={$port}, User={$user}, Pass=****");
             
             // Connect to MikroTik with appropriate settings from the environment
             $mikrotikClient = new RouterOSAPI([
                 'host' => $host,
                 'user' => $user,
-                'pass' => env('MIKROTIK_PASS', 'Erekapp314'),
+                'pass' => $pass,
                 'port' => $port,
-                'timeout' => 5, // Reduced timeout to avoid long waits
+                'timeout' => 20, // Increased timeout for better reliability
             ]);
             
             // Create MikroTik service instance
@@ -441,12 +441,8 @@ class DashboardController extends Controller
             
             // Test connection to ensure it's working
             if (!$mikrotikService->testConnection()) {
-                // If in local development, use mock data instead of failing
-                if (env('APP_ENV') === 'local') {
-                    \Log::info("Using mock data for local development since MikroTik connection failed");
-                    return response()->json($this->getMockBandwidthData());
-                }
-                throw new \Exception("Cannot establish connection to MikroTik router at {$host}:{$port}");
+                \Log::error("Connection test failed for MikroTik router at {$host}:{$port}");
+                throw new \Exception("Cannot establish connection to MikroTik router at {$host}:{$port}. Please check your connection settings.");
             }
             
             \Log::info("Successfully connected to MikroTik router");
@@ -460,24 +456,66 @@ class DashboardController extends Controller
             // If debugging is enabled, log the first connection details
             if (env('APP_DEBUG') && count($activeConnections) > 0) {
                 \Log::debug("First connection details: " . json_encode($activeConnections[0]));
+            } else if (count($activeConnections) === 0) {
+                \Log::warning("No active connections found on MikroTik router. This might be normal if no users are connected.");
             }
             
-            // Calculate total and average bandwidth usage
-            $totalRxRate = 0;
-            $totalTxRate = 0;
+            // Get interface traffic data for more accurate real-time rates
+            $interfaceTraffic = $mikrotikService->getInterfaceTraffic();
+            
+            // Use interface traffic data for total rates (more accurate)
+            $totalRxRate = $interfaceTraffic['rx-bits-per-second'] ?? 0;
+            $totalTxRate = $interfaceTraffic['tx-bits-per-second'] ?? 0;
+            
+            // Log information about the traffic source
+            $interfaceTrafficType = $interfaceTraffic['type'] ?? 'unknown';
+            $interfaceName = $interfaceTraffic['interface'] ?? 'all';
+            
+            \Log::info("Interface traffic rates from {$interfaceTrafficType} interface {$interfaceName}: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
+            
+            // For external interfaces like WAN, RX is download and TX is upload from user perspective
+            // For internal interfaces like LAN, we should use the active connections data instead
+            if ($interfaceTrafficType !== 'external' && $totalRxRate === 0 && $totalTxRate === 0 && count($activeConnections) > 0) {
+                \Log::info("No external interface traffic data available, using sum of individual connections instead");
+                
+                // Calculate total from connections
+                foreach ($activeConnections as $connection) {
+                    // Ensure we're using the raw values for calculations
+                    if (isset($connection['rx_rate_raw'])) {
+                        $totalRxRate += $connection['rx_rate_raw'];
+                    }
+                    
+                    if (isset($connection['tx_rate_raw'])) {
+                        $totalTxRate += $connection['tx_rate_raw'];
+                    }
+                }
+                
+                \Log::info("Calculated traffic from connections: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
+            } else if ($interfaceTrafficType === 'external' && count($activeConnections) === 0) {
+                // If we have external interface traffic but no active connections,
+                // this indicates background traffic not associated with hotspot users
+                \Log::info("External interface traffic detected with no active connections - likely background traffic");
+            }
+            
+            // Calculate total bytes transferred
             $totalRxBytes = 0;
             $totalTxBytes = 0;
             $userCount = count($activeConnections);
             
             foreach ($activeConnections as $connection) {
-                $totalRxRate += $connection['rx_rate_raw'];
-                $totalTxRate += $connection['tx_rate_raw'];
-                $totalRxBytes += isset($connection['bytes_in']) ? $connection['bytes_in'] : 0;
-                $totalTxBytes += isset($connection['bytes_out']) ? $connection['bytes_out'] : 0;
+                // Add bytes_in and bytes_out if available
+                if (isset($connection['bytes_in'])) {
+                    $totalRxBytes += $connection['bytes_in'];
+                }
+                
+                if (isset($connection['bytes_out'])) {
+                    $totalTxBytes += $connection['bytes_out'];
+                }
             }
             
             // Log the calculated totals
             \Log::info("Total bandwidth: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
+            \Log::info("Total bytes: RX={$totalRxBytes} bytes, TX={$totalTxBytes} bytes");
             
             // Extract data for the chart
             $rxData = [];
@@ -485,9 +523,19 @@ class DashboardController extends Controller
             $labels = [];
             
             foreach ($activeConnections as $connection) {
-                $rxData[] = $connection['rx_rate_raw'];
-                $txData[] = $connection['tx_rate_raw'];
-                $labels[] = $connection['username'];
+                if (isset($connection['rx_rate_raw'])) {
+                    $rxData[] = $connection['rx_rate_raw'];
+                } else {
+                    $rxData[] = 0;
+                }
+                
+                if (isset($connection['tx_rate_raw'])) {
+                    $txData[] = $connection['tx_rate_raw'];
+                } else {
+                    $txData[] = 0;
+                }
+                
+                $labels[] = $connection['username'] ?? 'Unknown';
             }
             
             // Get database totals for display
@@ -496,17 +544,31 @@ class DashboardController extends Controller
             // Update database with bandwidth usage
             $this->updateBandwidthUsageInDatabase($activeConnections);
             
+            // Format bandwidth values for display
+            $totalRxRateFormatted = $this->formatBandwidth($totalRxRate);
+            $totalTxRateFormatted = $this->formatBandwidth($totalTxRate);
+            $averageRxRate = $userCount > 0 ? $this->formatBandwidth($totalRxRate / $userCount) : '0 bps';
+            $averageTxRate = $userCount > 0 ? $this->formatBandwidth($totalTxRate / $userCount) : '0 bps';
+            
+            // Get network capacity - default to 1 Gbps if not configured
+            $networkCapacity = env('NETWORK_CAPACITY_MBPS', 1000) * 1000000; // Convert Mbps to bps
+            
             // Create response data
             $responseData = [
                 'success' => true,
                 'activeUsers' => $userCount,
-                'totalRx' => $this->formatBandwidth($totalRxRate),
-                'totalTx' => $this->formatBandwidth($totalTxRate),
-                'totalRxBytes' => $totalRxBytes > 0 ? $mikrotikService->formatBytesTransferred($totalRxBytes) : null,
-                'totalTxBytes' => $totalTxBytes > 0 ? $mikrotikService->formatBytesTransferred($totalTxBytes) : null,
-                'averageRx' => $userCount > 0 ? $this->formatBandwidth($totalRxRate / $userCount) : '0 bps',
-                'averageTx' => $userCount > 0 ? $this->formatBandwidth($totalTxRate / $userCount) : '0 bps',
+                'totalRx' => $totalRxRateFormatted,
+                'totalTx' => $totalTxRateFormatted,
+                'total_rx_rate_formatted' => $totalRxRateFormatted,
+                'total_tx_rate_formatted' => $totalTxRateFormatted,
+                'totalRxBytes' => $totalRxBytes > 0 ? $mikrotikService->formatBytesTransferred($totalRxBytes) : '0 B',
+                'totalTxBytes' => $totalTxBytes > 0 ? $mikrotikService->formatBytesTransferred($totalTxBytes) : '0 B',
+                'averageRx' => $averageRxRate,
+                'averageTx' => $averageTxRate,
+                'average_rx_rate' => $averageRxRate,
+                'average_tx_rate' => $averageTxRate,
                 'connections' => $activeConnections,
+                'active_connections' => $activeConnections,
                 'rxData' => $rxData,
                 'txData' => $txData,
                 'labels' => $labels,
@@ -516,12 +578,24 @@ class DashboardController extends Controller
                 'debug' => [
                     'mikrotik_host' => $host,
                     'mikrotik_port' => $port,
-                    'connection_status' => 'success'
+                    'connection_status' => 'success',
+                    'active_connections_count' => count($activeConnections),
+                    'bandwidth_capacity' => $networkCapacity,
+                    'bandwidth_raw' => [
+                        'rx' => $totalRxRate,
+                        'tx' => $totalTxRate
+                    ],
+                    'interface_traffic' => [
+                        'success' => isset($interfaceTraffic['rx-bits-per-second']),
+                        'rx' => $interfaceTraffic['rx-bits-per-second'] ?? 0,
+                        'tx' => $interfaceTraffic['tx-bits-per-second'] ?? 0
+                    ]
                 ]
             ];
             
             // Cache the response for 5 seconds
             Cache::put('bandwidth_data', $responseData, now()->addSeconds(5));
+            Cache::put('bandwidth_data_timestamp', time(), now()->addSeconds(5));
             
             return response()->json($responseData);
             
@@ -529,18 +603,13 @@ class DashboardController extends Controller
             \Log::error('Failed to get bandwidth data: ' . $e->getMessage());
             \Log::error('Stack trace: ' . $e->getTraceAsString());
             
-            // If in local development, use mock data instead of failing
-            if (env('APP_ENV') === 'local') {
-                \Log::info("Using mock data for local development due to exception: " . $e->getMessage());
-                return response()->json($this->getMockBandwidthData());
-            }
-            
             // Check if we have a cached version we can fall back to
             if (Cache::has('bandwidth_data')) {
                 $cachedData = Cache::get('bandwidth_data');
                 $cachedData['success'] = true;
                 $cachedData['fromCache'] = true;
                 $cachedData['cacheReason'] = 'Error connecting to router: ' . $e->getMessage();
+                $cachedData['cache_time'] = date('H:i:s', Cache::get('bandwidth_data_timestamp', time()));
                 
                 return response()->json($cachedData);
             }
@@ -548,117 +617,17 @@ class DashboardController extends Controller
             // If no cache is available, return an error response with detailed information
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur de connexion au routeur MikroTik',
+                'message' => 'Erreur de connexion au routeur MikroTik: ' . $e->getMessage(),
                 'error' => $e->getMessage(),
                 'debug' => [
                     'mikrotik_host' => env('MIKROTIK_HOST', 'eurekadigital.ddns.net'),
                     'mikrotik_port' => (int)env('MIKROTIK_PORT', 8728),
                     'connection_status' => 'failed',
+                    'error_time' => date('Y-m-d H:i:s'),
                     'error_details' => env('APP_DEBUG') ? $e->getTraceAsString() : null
                 ]
             ], 500);
         }
-    }
-    
-    /**
-     * Generate mock bandwidth data for local development and testing
-     * 
-     * @return array
-     */
-    private function getMockBandwidthData()
-    {
-        // Generate random number of active users (1-5)
-        $userCount = rand(1, 5);
-        
-        // Create mock active connections
-        $activeConnections = [];
-        $rxData = [];
-        $txData = [];
-        $labels = [];
-        $totalRxRate = 0;
-        $totalTxRate = 0;
-        $totalRxBytes = 0;
-        $totalTxBytes = 0;
-        
-        // Mock user data
-        $mockUsers = [
-            ['name' => 'User1', 'mac' => '00:11:22:33:44:55', 'ip' => '192.168.1.100'],
-            ['name' => 'User2', 'mac' => '00:11:22:33:44:56', 'ip' => '192.168.1.101'],
-            ['name' => 'User3', 'mac' => '00:11:22:33:44:57', 'ip' => '192.168.1.102'],
-            ['name' => 'User4', 'mac' => '00:11:22:33:44:58', 'ip' => '192.168.1.103'],
-            ['name' => 'User5', 'mac' => '00:11:22:33:44:59', 'ip' => '192.168.1.104'],
-        ];
-        
-        for ($i = 0; $i < $userCount; $i++) {
-            // Generate random bandwidth values (in bps)
-            $rxRateRaw = rand(500000, 5000000); // 500 Kbps to 5 Mbps
-            $txRateRaw = rand(100000, 1000000); // 100 Kbps to 1 Mbps
-            
-            // Generate cumulative bytes
-            $bytesIn = rand(10000000, 100000000); // 10 MB to 100 MB
-            $bytesOut = rand(1000000, 10000000);  // 1 MB to 10 MB
-            
-            // Add to totals
-            $totalRxRate += $rxRateRaw;
-            $totalTxRate += $txRateRaw;
-            $totalRxBytes += $bytesIn;
-            $totalTxBytes += $bytesOut;
-            
-            // Format values
-            $rxRate = $this->formatBandwidth($rxRateRaw);
-            $txRate = $this->formatBandwidth($txRateRaw);
-            $bytesInFormatted = $this->formatBytes($bytesIn);
-            $bytesOutFormatted = $this->formatBytes($bytesOut);
-            
-            // Add to arrays for charts
-            $rxData[] = $rxRateRaw;
-            $txData[] = $txRateRaw;
-            $labels[] = $mockUsers[$i]['name'];
-            
-            // Create connection entry
-            $activeConnections[] = [
-                'username' => $mockUsers[$i]['name'],
-                'mac_address' => $mockUsers[$i]['mac'],
-                'ip_address' => $mockUsers[$i]['ip'],
-                'rx_rate' => $rxRate,
-                'tx_rate' => $txRate,
-                'rx_rate_raw' => $rxRateRaw,
-                'tx_rate_raw' => $txRateRaw,
-                'bytes_in' => $bytesIn,
-                'bytes_out' => $bytesOut,
-                'bytes_in_formatted' => $bytesInFormatted,
-                'bytes_out_formatted' => $bytesOutFormatted,
-                'uptime' => rand(1, 12) . ':' . rand(10, 59) . ':' . rand(10, 59),
-                'login_time' => 'cookie',
-                'session_id' => 'mock-session-' . $i
-            ];
-        }
-        
-        // Get database totals for display
-        $databaseTotals = $this->getDatabaseTotals();
-        
-        // Create response data
-        return [
-            'success' => true,
-            'activeUsers' => $userCount,
-            'totalRx' => $this->formatBandwidth($totalRxRate),
-            'totalTx' => $this->formatBandwidth($totalTxRate),
-            'totalRxBytes' => $this->formatBytes($totalRxBytes),
-            'totalTxBytes' => $this->formatBytes($totalTxBytes),
-            'averageRx' => $userCount > 0 ? $this->formatBandwidth($totalRxRate / $userCount) : '0 bps',
-            'averageTx' => $userCount > 0 ? $this->formatBandwidth($totalTxRate / $userCount) : '0 bps',
-            'connections' => $activeConnections,
-            'rxData' => $rxData,
-            'txData' => $txData,
-            'labels' => $labels,
-            'timestamp' => now()->timestamp,
-            'source' => 'mock',
-            'databaseTotals' => $databaseTotals,
-            'debug' => [
-                'connection_status' => 'mock_data',
-                'note' => 'Using mock data for local development'
-            ]
-        ];
     }
     
     /**

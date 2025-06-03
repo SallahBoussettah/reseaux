@@ -18,14 +18,53 @@ class MikroTikService
     public function testConnection()
     {
         try {
+            \Log::info("Testing connection to MikroTik router...");
+            
+            // Log connection parameters (without password)
+            $connectionParams = [
+                'host' => env('MIKROTIK_HOST', 'eurekadigital.ddns.net'),
+                'port' => env('MIKROTIK_PORT', 8728),
+                'user' => env('MIKROTIK_USER', 'api'),
+                'timeout' => 15
+            ];
+            \Log::info("Connection parameters: " . json_encode($connectionParams));
+            
             // A simple query to test the connection
             $query = (new Query('/system/resource/print'));
             $response = $this->client->query($query)->read();
             
             // If we get a response, the connection is working
-            return !empty($response);
+            if (!empty($response)) {
+                // Extract system information for logging
+                $systemInfo = $response[0] ?? [];
+                $version = $systemInfo['version'] ?? 'unknown';
+                $cpuLoad = $systemInfo['cpu-load'] ?? 'unknown';
+                $uptime = $systemInfo['uptime'] ?? 'unknown';
+                
+                \Log::info("MikroTik connection successful. Router version: $version, CPU load: $cpuLoad, Uptime: $uptime");
+                return true;
+            } else {
+                \Log::warning("MikroTik connection test returned empty response");
+                return false;
+            }
         } catch (\Exception $e) {
-            \Log::error('MikroTik connection test failed: ' . $e->getMessage());
+            $errorMessage = $e->getMessage();
+            $errorCode = $e->getCode();
+            
+            // Enhanced error logging with more detailed diagnostics
+            \Log::error("MikroTik connection test failed: {$errorMessage} (Code: {$errorCode})");
+            
+            // Provide more specific diagnostic information based on error type
+            if (strpos($errorMessage, 'timeout') !== false) {
+                \Log::error("Connection timeout detected. Check if the router is reachable at the specified IP/hostname and port.");
+            } elseif (strpos($errorMessage, 'refused') !== false || $errorCode === 111) {
+                \Log::error("Connection refused. Ensure the API service is enabled on the router and the port is correct.");
+            } elseif (strpos($errorMessage, 'auth') !== false || strpos($errorMessage, 'login') !== false) {
+                \Log::error("Authentication failure. Verify username and password are correct.");
+            } elseif (strpos($errorMessage, 'resolve') !== false) {
+                \Log::error("DNS resolution failed. Check if the hostname is correct.");
+            }
+            
             return false;
         }
     }
@@ -218,22 +257,41 @@ class MikroTikService
             // Process and format the data
             $formattedConnections = [];
             foreach ($activeConnections as $connection) {
+                // Log the raw values from the router for debugging
+                \Log::debug("Raw connection data: " . json_encode($connection));
+                
                 // Extract user info
                 $username = $connection['user'] ?? 'unknown';
                 $macAddress = $connection['mac-address'] ?? 'unknown';
                 $ipAddress = $connection['address'] ?? 'unknown';
                 
                 // Extract bandwidth usage (convert from bytes to more readable format)
-                $rxRateRaw = $connection['rx-rate'] ?? 0;
-                $txRateRaw = $connection['tx-rate'] ?? 0;
+                $rxRateRaw = isset($connection['rx-rate']) ? (int)$connection['rx-rate'] : 0;
+                $txRateRaw = isset($connection['tx-rate']) ? (int)$connection['tx-rate'] : 0;
                 
                 // Extract total bytes transferred
                 $bytesIn = isset($connection['bytes-in']) ? (int)$connection['bytes-in'] : 0;
                 $bytesOut = isset($connection['bytes-out']) ? (int)$connection['bytes-out'] : 0;
                 
-                // Format bandwidth
-                $rxRate = $this->formatBandwidth($rxRateRaw);
-                $txRate = $this->formatBandwidth($txRateRaw);
+                // Format bandwidth - keeping tx and rx swapped as per your initial setup
+                $rxRate = $this->formatBandwidth($txRateRaw); // Note: deliberately swapped as mentioned
+                $txRate = $this->formatBandwidth($rxRateRaw); // Note: deliberately swapped as mentioned
+                
+                // Check if rx/tx rates are zero but bytes transferred is not
+                $isIdle = ($rxRateRaw === 0 && $txRateRaw === 0);
+                $hasTransferredData = ($bytesIn > 0 || $bytesOut > 0);
+                
+                if ($isIdle && $hasTransferredData) {
+                    \Log::info("User {$username} is currently idle (0 bps) but has transferred data: In={$bytesIn} bytes, Out={$bytesOut} bytes");
+                    
+                    // Append idle status to formatted rate
+                    $rxRate = "0 bps <small>(idle)</small>";
+                    $txRate = "0 bps <small>(idle)</small>";
+                } else if ($isIdle) {
+                    \Log::info("User {$username} is idle with no data transfer");
+                } else {
+                    \Log::info("User {$username} is active with current rates: RX={$rxRate}, TX={$txRate}");
+                }
                 
                 // Format bytes transferred for display
                 $bytesInFormatted = $this->formatBytesTransferred($bytesIn);
@@ -247,34 +305,33 @@ class MikroTikService
                     'username' => $username,
                     'mac_address' => $macAddress,
                     'ip_address' => $ipAddress,
-                    'rx_rate' => $rxRate,
-                    'tx_rate' => $txRate,
-                    'rx_rate_raw' => $rxRateRaw,
-                    'tx_rate_raw' => $txRateRaw,
+                    'rx_rate' => $rxRate, // Note: deliberately swapped as mentioned
+                    'tx_rate' => $txRate, // Note: deliberately swapped as mentioned
+                    'rx_rate_raw' => $txRateRaw, // Note: deliberately swapped but still raw value
+                    'tx_rate_raw' => $rxRateRaw, // Note: deliberately swapped but still raw value
                     'bytes_in' => $bytesIn,
                     'bytes_out' => $bytesOut,
                     'bytes_in_formatted' => $bytesInFormatted,
                     'bytes_out_formatted' => $bytesOutFormatted,
                     'uptime' => $uptime,
-                    'login_time' => $connection['login-by'] ?? 'unknown',
-                    'session_id' => $connection['.id'] ?? null
+                    'login_time' => isset($connection['login-by']) ? $connection['login-by'] : 'unknown',
+                    'session_id' => isset($connection['.id']) ? $connection['.id'] : 'unknown',
+                    'status' => $isIdle ? 'idle' : 'active',
+                    'has_transferred_data' => $hasTransferredData
                 ];
+                
+                // Log detailed information for each connection
+                \Log::info("Connection details for {$username}: " .
+                          "RX={$rxRate} ({$txRateRaw} bps), " . // Note the deliberate swap
+                          "TX={$txRate} ({$rxRateRaw} bps), " . // Note the deliberate swap
+                          "Bytes In={$bytesInFormatted}, " .
+                          "Bytes Out={$bytesOutFormatted}");
             }
             
             return $formattedConnections;
         } catch (\Exception $e) {
             \Log::error('Failed to get active connections with bandwidth: ' . $e->getMessage());
-            \Log::error('Exception details: ' . $e->getTraceAsString());
-            
-            // Add more detailed error diagnostics based on the error type
-            if (strpos($e->getMessage(), 'timeout') !== false) {
-                \Log::error('MikroTik connection timeout - check network connectivity to ' . 
-                           env('MIKROTIK_HOST', 'eurekadigital.ddns.net') . ':' . 
-                           env('MIKROTIK_PORT', 8728));
-            } elseif (strpos($e->getMessage(), 'refused') !== false) {
-                \Log::error('MikroTik connection refused - verify that API service is running on the router');
-            }
-            
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
             return [];
         }
     }
@@ -300,9 +357,7 @@ class MikroTikService
     {
         $bytes = (int)$bytes;
         
-        if ($bytes === 0) {
-            return '0 bps';
-        } else if ($bytes > 1000000) {
+        if ($bytes > 1000000) {
             return round($bytes / 1000000, 2) . ' Mbps';
         } elseif ($bytes > 1000) {
             return round($bytes / 1000, 2) . ' Kbps';
@@ -365,6 +420,162 @@ class MikroTikService
             \Log::error('Failed to get accounting data: ' . $e->getMessage());
             \Log::error('Exception details: ' . $e->getTraceAsString());
             return [];
+        }
+    }
+
+    /**
+     * Get real-time interface traffic statistics
+     * This method fetches the current traffic rate from a specific interface
+     * 
+     * @param string $interfaceName The name of the interface to monitor (default: all interfaces)
+     * @return array The traffic data including rx-bits-per-second and tx-bits-per-second
+     */
+    public function getInterfaceTraffic($interfaceName = null)
+    {
+        try {
+            // First check if the connection is working
+            if (!$this->testConnection()) {
+                throw new \Exception("Cannot establish connection to MikroTik router");
+            }
+            
+            \Log::info('Fetching interface traffic data from MikroTik');
+            
+            // Common WAN interface names to check first
+            $priorityInterfaces = ['ether1', 'wlan1', 'sfp1', 'pppoe-out1', 'wan'];
+            
+            // Get all interfaces if no specific interface is specified
+            if ($interfaceName === null) {
+                // First get list of all interfaces
+                $interfacesQuery = (new Query('/interface/print'));
+                $interfaces = $this->client->query($interfacesQuery)->read();
+                
+                \Log::info('Found ' . count($interfaces) . ' interfaces on MikroTik router');
+                
+                // Initialize counters
+                $totalRxBitsPerSecond = 0;
+                $totalTxBitsPerSecond = 0;
+                $wanInterfaceFound = false;
+                
+                // First try to find a WAN/external interface specifically
+                foreach ($priorityInterfaces as $wanInterface) {
+                    foreach ($interfaces as $interface) {
+                        if (isset($interface['name']) && 
+                            isset($interface['running']) && 
+                            $interface['running'] === 'true' &&
+                            (strpos($interface['name'], $wanInterface) !== false || $interface['name'] === $wanInterface)) {
+                            
+                            \Log::info("Found priority external interface: {$interface['name']}");
+                            
+                            // Monitor this interface only
+                            $trafficQuery = (new Query('/interface/monitor-traffic'))
+                                ->equal('interface', $interface['name'])
+                                ->equal('once', '');
+                            
+                            $trafficData = $this->client->query($trafficQuery)->read();
+                            
+                            if (!empty($trafficData)) {
+                                // Use this as our definitive external traffic source
+                                $rxBitsPerSecond = isset($trafficData[0]['rx-bits-per-second']) ? 
+                                    (int)$trafficData[0]['rx-bits-per-second'] : 0;
+                                
+                                $txBitsPerSecond = isset($trafficData[0]['tx-bits-per-second']) ? 
+                                    (int)$trafficData[0]['tx-bits-per-second'] : 0;
+                                
+                                \Log::info("External interface {$interface['name']} traffic: RX={$rxBitsPerSecond} bps, TX={$txBitsPerSecond} bps");
+                                
+                                // Important: For external interfaces, RX is download and TX is upload from the user perspective
+                                return [
+                                    'rx-bits-per-second' => $rxBitsPerSecond,
+                                    'tx-bits-per-second' => $txBitsPerSecond,
+                                    'interface' => $interface['name'],
+                                    'type' => 'external'
+                                ];
+                            }
+                            
+                            $wanInterfaceFound = true;
+                            break;
+                        }
+                    }
+                    
+                    if ($wanInterfaceFound) {
+                        break;
+                    }
+                }
+                
+                // If no WAN interface was found, fall back to all interfaces approach
+                if (!$wanInterfaceFound) {
+                    \Log::warning("No priority external interface found, summing all interfaces instead");
+                    
+                    // Get traffic from each interface that's running
+                    foreach ($interfaces as $interface) {
+                        if (isset($interface['name']) && isset($interface['running']) && $interface['running'] === 'true') {
+                            $interfaceName = $interface['name'];
+                            
+                            // Skip loopback and internal interfaces
+                            if (strpos($interfaceName, 'lo') === 0 || 
+                                strpos($interfaceName, 'bridge') === 0 ||
+                                strpos($interfaceName, 'vlan') === 0 ||
+                                strpos($interfaceName, 'veth') === 0) {
+                                continue;
+                            }
+                            
+                            \Log::info("Monitoring traffic on interface: {$interfaceName}");
+                            
+                            // Get traffic for this interface
+                            $trafficQuery = (new Query('/interface/monitor-traffic'))
+                                ->equal('interface', $interfaceName)
+                                ->equal('once', '');
+                            
+                            $trafficData = $this->client->query($trafficQuery)->read();
+                            
+                            if (!empty($trafficData)) {
+                                // Add to total
+                                $totalRxBitsPerSecond += isset($trafficData[0]['rx-bits-per-second']) ? 
+                                    (int)$trafficData[0]['rx-bits-per-second'] : 0;
+                                
+                                $totalTxBitsPerSecond += isset($trafficData[0]['tx-bits-per-second']) ? 
+                                    (int)$trafficData[0]['tx-bits-per-second'] : 0;
+                                
+                                \Log::debug("Interface {$interfaceName} traffic: RX=" . 
+                                    ($trafficData[0]['rx-bits-per-second'] ?? 0) . " bps, TX=" . 
+                                    ($trafficData[0]['tx-bits-per-second'] ?? 0) . " bps");
+                            }
+                        }
+                    }
+                    
+                    \Log::info("Total network traffic (all interfaces): RX={$totalRxBitsPerSecond} bps, TX={$totalTxBitsPerSecond} bps");
+                    
+                    return [
+                        'rx-bits-per-second' => $totalRxBitsPerSecond,
+                        'tx-bits-per-second' => $totalTxBitsPerSecond,
+                        'type' => 'all'
+                    ];
+                }
+            } else {
+                // Monitor specific interface
+                $query = (new Query('/interface/monitor-traffic'))
+                    ->equal('interface', $interfaceName)
+                    ->equal('once', '');
+                
+                $trafficData = $this->client->query($query)->read();
+                
+                if (!empty($trafficData)) {
+                    \Log::info('Successfully retrieved interface traffic data for ' . $interfaceName);
+                    \Log::debug('Traffic data: ' . json_encode($trafficData[0]));
+                    return array_merge($trafficData[0] ?? [], ['interface' => $interfaceName]);
+                }
+                
+                \Log::warning('No interface traffic data returned for ' . $interfaceName);
+                return [];
+            }
+        } catch (\Exception $e) {
+            \Log::error('Failed to get interface traffic: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            return [
+                'rx-bits-per-second' => 0,
+                'tx-bits-per-second' => 0,
+                'error' => $e->getMessage()
+            ];
         }
     }
 }
