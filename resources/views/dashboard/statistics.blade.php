@@ -196,7 +196,7 @@
                             <div class="card-body text-center">
                                 <h6 class="text-muted mb-2">Total Download</h6>
                                 <h2 class="mb-0 fw-bold text-primary">{{ $totalRxRateFormatted }}</h2>
-                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['downloaded'] }} total</p>
+                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
                                     </div>
                                 </div>
                                 </div>
@@ -205,7 +205,7 @@
                             <div class="card-body text-center">
                                 <h6 class="text-muted mb-2">Total Upload</h6>
                                 <h2 class="mb-0 fw-bold text-success">{{ $totalTxRateFormatted }}</h2>
-                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
+                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['downloaded'] }} total</p>
                             </div>
                         </div>
                     </div>
@@ -239,7 +239,7 @@
                                         <div class="card-body text-center">
                                             <h6 class="text-muted mb-2">Total Downloaded</h6>
                                             <h2 class="mb-0 fw-bold text-primary">
-                                                {{ $formattedDatabaseTotals['downloaded'] }}
+                                                {{ $formattedDatabaseTotals['uploaded'] }}
                                             </h2>
                                         </div>
                                     </div>
@@ -249,7 +249,7 @@
                                         <div class="card-body text-center">
                                             <h6 class="text-muted mb-2">Total Uploaded</h6>
                                             <h2 class="mb-0 fw-bold text-success">
-                                                {{ $formattedDatabaseTotals['uploaded'] }}
+                                                {{ $formattedDatabaseTotals['downloaded'] }}
                                             </h2>
                                         </div>
                                     </div>
@@ -873,10 +873,10 @@ function initializeSecondaryCharts() {
     let bandwidthOptions = {
         series: [{
             name: 'Downloaded',
-            data: bandwidthUsage.map(user => user.total_downloaded_bytes)
+            data: bandwidthUsage.map(user => user.total_uploaded_bytes)
         }, {
             name: 'Uploaded',
-            data: bandwidthUsage.map(user => user.total_uploaded_bytes)
+            data: bandwidthUsage.map(user => user.total_downloaded_bytes)
         }],
         chart: {
             height: 350,
@@ -900,7 +900,7 @@ function initializeSecondaryCharts() {
             formatter: function (val, opt) {
                 // Return the formatted byte value
                 if (opt.w.globals.labels[opt.dataPointIndex]) {
-                    return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'downloaded_formatted' : 'uploaded_formatted'];
+                    return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'uploaded_formatted' : 'downloaded_formatted'];
                 }
                 return val;
             },
@@ -918,7 +918,7 @@ function initializeSecondaryCharts() {
                 formatter: function (val, opt) {
                     // Return the formatted byte value
                     if (opt.w.globals.labels[opt.dataPointIndex]) {
-                        return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'downloaded_formatted' : 'uploaded_formatted'];
+                        return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'uploaded_formatted' : 'downloaded_formatted'];
                     }
                     return val;
                 }
