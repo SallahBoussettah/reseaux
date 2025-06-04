@@ -402,7 +402,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Get real-time bandwidth data for AJAX requests
+     * Get bandwidth data for the dashboard via AJAX
      * 
      * @return \Illuminate\Http\JsonResponse
      */
@@ -447,40 +447,52 @@ class DashboardController extends Controller
             
             \Log::info("Successfully connected to MikroTik router");
             
+            // Get interface traffic data first (more reliable for total bandwidth)
+            $interfaceTraffic = $mikrotikService->getInterfaceTraffic();
+            
             // Get active connections with bandwidth usage
             $activeConnections = $mikrotikService->getActiveConnectionsWithBandwidth();
             
-            // Log the number of active connections found
-            \Log::info("Retrieved " . count($activeConnections) . " active connections from MikroTik");
+            // Get user data from database to map MAC addresses to user names
+            $macAddresses = collect($activeConnections)->pluck('mac_address')->filter()->toArray();
+            $userDataMap = [];
             
-            // If debugging is enabled, log the first connection details
-            if (env('APP_DEBUG') && count($activeConnections) > 0) {
-                \Log::debug("First connection details: " . json_encode($activeConnections[0]));
-            } else if (count($activeConnections) === 0) {
-                \Log::warning("No active connections found on MikroTik router. This might be normal if no users are connected.");
+            if (!empty($macAddresses)) {
+                // Fetch clients with these MAC addresses
+                $clients = \App\Models\Client::whereIn('mac_address', $macAddresses)->get();
+                
+                // Create a map of MAC address to user data
+                foreach ($clients as $client) {
+                    $userDataMap[$client->mac_address] = [
+                        'id' => $client->id,
+                        'full_name' => $client->full_name,
+                        'email' => $client->email,
+                        'status' => $client->status
+                    ];
+                }
+                
+                \Log::info("Found " . count($userDataMap) . " users in database matching active connections");
             }
             
-            // Get interface traffic data for more accurate real-time rates
-            $interfaceTraffic = $mikrotikService->getInterfaceTraffic();
+            // Count active users
+            $userCount = count($activeConnections);
+            \Log::info("Found {$userCount} active connections on MikroTik router");
             
-            // Use interface traffic data for total rates (more accurate)
-            $totalRxRate = $interfaceTraffic['rx-bits-per-second'] ?? 0;
-            $totalTxRate = $interfaceTraffic['tx-bits-per-second'] ?? 0;
+            // Calculate total bandwidth usage
+            $totalRxRate = 0;
+            $totalTxRate = 0;
+            $totalRxBytes = 0;
+            $totalTxBytes = 0;
             
-            // Log information about the traffic source
-            $interfaceTrafficType = $interfaceTraffic['type'] ?? 'unknown';
-            $interfaceName = $interfaceTraffic['interface'] ?? 'all';
-            
-            \Log::info("Interface traffic rates from {$interfaceTrafficType} interface {$interfaceName}: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
-            
-            // For external interfaces like WAN, RX is download and TX is upload from user perspective
-            // For internal interfaces like LAN, we should use the active connections data instead
-            if ($interfaceTrafficType !== 'external' && $totalRxRate === 0 && $totalTxRate === 0 && count($activeConnections) > 0) {
-                \Log::info("No external interface traffic data available, using sum of individual connections instead");
+            // If we have interface traffic data, use that for total bandwidth (more reliable)
+            if (isset($interfaceTraffic['rx-bits-per-second']) && isset($interfaceTraffic['tx-bits-per-second'])) {
+                $totalRxRate = $interfaceTraffic['rx-bits-per-second'];
+                $totalTxRate = $interfaceTraffic['tx-bits-per-second'];
                 
-                // Calculate total from connections
+                \Log::info("Using interface traffic data: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
+            } else {
+                // Otherwise sum up the individual connection rates
                 foreach ($activeConnections as $connection) {
-                    // Ensure we're using the raw values for calculations
                     if (isset($connection['rx_rate_raw'])) {
                         $totalRxRate += $connection['rx_rate_raw'];
                     }
@@ -488,32 +500,20 @@ class DashboardController extends Controller
                     if (isset($connection['tx_rate_raw'])) {
                         $totalTxRate += $connection['tx_rate_raw'];
                     }
+                    
+                    if (isset($connection['bytes_in'])) {
+                        $totalRxBytes += $connection['bytes_in'];
+                    }
+                    
+                    if (isset($connection['bytes_out'])) {
+                        $totalTxBytes += $connection['bytes_out'];
+                    }
                 }
                 
-                \Log::info("Calculated traffic from connections: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
-            } else if ($interfaceTrafficType === 'external' && count($activeConnections) === 0) {
-                // If we have external interface traffic but no active connections,
-                // this indicates background traffic not associated with hotspot users
-                \Log::info("External interface traffic detected with no active connections - likely background traffic");
+                \Log::info("Calculated total bandwidth from connections: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
             }
             
-            // Calculate total bytes transferred
-            $totalRxBytes = 0;
-            $totalTxBytes = 0;
-            $userCount = count($activeConnections);
-            
-            foreach ($activeConnections as $connection) {
-                // Add bytes_in and bytes_out if available
-                if (isset($connection['bytes_in'])) {
-                    $totalRxBytes += $connection['bytes_in'];
-                }
-                
-                if (isset($connection['bytes_out'])) {
-                    $totalTxBytes += $connection['bytes_out'];
-                }
-            }
-            
-            // Log the calculated totals
+            // Log total bandwidth usage
             \Log::info("Total bandwidth: RX={$totalRxRate} bps, TX={$totalTxRate} bps");
             \Log::info("Total bytes: RX={$totalRxBytes} bytes, TX={$totalTxBytes} bytes");
             
@@ -535,7 +535,17 @@ class DashboardController extends Controller
                     $txData[] = 0;
                 }
                 
-                $labels[] = $connection['username'] ?? 'Unknown';
+                // Check if we have a user name for this MAC address
+                $macAddress = $connection['mac_address'] ?? null;
+                $displayName = $connection['username'] ?? 'Unknown';
+                
+                if ($macAddress && isset($userDataMap[$macAddress]) && !empty($userDataMap[$macAddress]['full_name'])) {
+                    $displayName = $userDataMap[$macAddress]['full_name'];
+                } else if ($macAddress && isset($userDataMap[$macAddress]) && !empty($userDataMap[$macAddress]['email'])) {
+                    $displayName = $userDataMap[$macAddress]['email'];
+                }
+                
+                $labels[] = $displayName;
             }
             
             // Get database totals for display
@@ -575,6 +585,7 @@ class DashboardController extends Controller
                 'timestamp' => now()->timestamp,
                 'source' => 'live',
                 'databaseTotals' => $databaseTotals,
+                'user_data' => $userDataMap, // Include user data for frontend mapping
                 'debug' => [
                     'mikrotik_host' => $host,
                     'mikrotik_port' => $port,
@@ -588,7 +599,9 @@ class DashboardController extends Controller
                     'interface_traffic' => [
                         'success' => isset($interfaceTraffic['rx-bits-per-second']),
                         'rx' => $interfaceTraffic['rx-bits-per-second'] ?? 0,
-                        'tx' => $interfaceTraffic['tx-bits-per-second'] ?? 0
+                        'tx' => $interfaceTraffic['tx-bits-per-second'] ?? 0,
+                        'interface' => $interfaceTraffic['interface'] ?? 'unknown',
+                        'type' => $interfaceTraffic['type'] ?? 'unknown'
                     ]
                 ]
             ];

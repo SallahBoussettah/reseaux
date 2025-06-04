@@ -167,6 +167,7 @@
                             <i class="uil uil-clock"></i> <span id="current-refresh-rate">30s</span>
                         </button>
                         <ul class="dropdown-menu" aria-labelledby="refreshRateDropdown">
+                            <li><a class="dropdown-item refresh-rate" href="#" data-rate="1">1 seconde</a></li>
                             <li><a class="dropdown-item refresh-rate" href="#" data-rate="5">5 secondes</a></li>
                             <li><a class="dropdown-item refresh-rate" href="#" data-rate="10">10 secondes</a></li>
                             <li><a class="dropdown-item refresh-rate active" href="#" data-rate="30">30 secondes</a></li>
@@ -550,6 +551,28 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Set up initial refresh rate from localStorage if available
+    const savedRefreshRate = localStorage.getItem('refreshRate');
+    if (savedRefreshRate) {
+        refreshRate = parseInt(savedRefreshRate, 10);
+        document.getElementById('current-refresh-rate').textContent = refreshRate + 's';
+        
+        // Update active class in dropdown
+        const refreshRateItems = document.querySelectorAll('.refresh-rate');
+        refreshRateItems.forEach(ri => ri.classList.remove('active'));
+        const savedOption = document.querySelector(`.refresh-rate[data-rate="${refreshRate}"]`);
+        if (savedOption) savedOption.classList.add('active');
+    } else {
+        // Set default to 1s
+        document.getElementById('current-refresh-rate').textContent = '1s';
+        
+        // Update active class in dropdown
+        const refreshRateItems = document.querySelectorAll('.refresh-rate');
+        refreshRateItems.forEach(ri => ri.classList.remove('active'));
+        const oneSecondOption = document.querySelector('.refresh-rate[data-rate="1"]');
+        if (oneSecondOption) oneSecondOption.classList.add('active');
+    }
+    
     // Add event listeners for refresh rate dropdown items
     const refreshRateItems = document.querySelectorAll('.refresh-rate');
     if (refreshRateItems.length > 0) {
@@ -560,6 +583,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Get the new refresh rate
                 const newRate = parseInt(this.getAttribute('data-rate'), 10);
                 refreshRate = newRate;
+                
+                // Store the value in localStorage for persistence
+                localStorage.setItem('refreshRate', newRate);
                 
                 // Update the displayed rate
                 document.getElementById('current-refresh-rate').textContent = newRate + 's';
@@ -1004,7 +1030,7 @@ function enableAllChartAnimations() {
 // Global variables for auto-refresh functionality
 let isAutoRefreshActive = false;
 let autoRefreshInterval = null;
-let refreshRate = 30; // Default refresh rate in seconds
+let refreshRate = 1; // Default refresh rate in seconds - changed to 1 second
 
 // Function to toggle auto-refresh
 function toggleAutoRefresh() {
@@ -1017,13 +1043,22 @@ function toggleAutoRefresh() {
         autoRefreshBtn.classList.remove('btn-outline-success');
         autoRefreshBtn.classList.add('btn-success', 'btn-pulse');
         
-        // First refresh immediately
-        refreshBandwidthData();
+        // First refresh immediately - with notification
+        refreshBandwidthData(true);
         
-        // Then set up interval
-        autoRefreshInterval = setInterval(refreshBandwidthData, refreshRate * 1000);
+        // Then set up interval - without notifications on each refresh
+        autoRefreshInterval = setInterval(() => refreshBandwidthData(false), refreshRate * 1000);
         
         showNotification(`Actualisation automatique démarrée (toutes les ${refreshRate} secondes)`, 'success');
+        
+        // Update dropdown to show 1s
+        document.getElementById('current-refresh-rate').textContent = refreshRate + 's';
+        
+        // Update active class in dropdown
+        const refreshRateItems = document.querySelectorAll('.refresh-rate');
+        refreshRateItems.forEach(ri => ri.classList.remove('active'));
+        const activeOption = document.querySelector(`.refresh-rate[data-rate="${refreshRate}"]`);
+        if (activeOption) activeOption.classList.add('active');
     } else {
         // Stop auto-refresh
         isAutoRefreshActive = false;
@@ -1031,6 +1066,10 @@ function toggleAutoRefresh() {
         autoRefreshBtn.innerHTML = '<i class="uil uil-play"></i> Démarrer l\'actualisation automatique';
         autoRefreshBtn.classList.remove('btn-success', 'btn-pulse');
         autoRefreshBtn.classList.add('btn-outline-success');
+        autoRefreshBtn.removeAttribute('title');
+        
+        // Reset page title
+        document.title = 'Statistiques';
         
         showNotification('Actualisation automatique arrêtée', 'info');
     }
@@ -1126,12 +1165,15 @@ function showNotification(message, type = 'success', duration = 3000) {
 }
 
 // Function to refresh bandwidth data via AJAX
-function refreshBandwidthData() {
-    // Show loading indicator
+function refreshBandwidthData(showNotifications = true) {
+    // Get chart element
     const chartElement = document.getElementById('real-time-bandwidth-chart');
     if (!chartElement) return; // Prevent errors if element doesn't exist yet
     
-    chartElement.innerHTML = '<div class="d-flex justify-content-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+    // Only show loading indicator if not in auto-refresh mode
+    if (!isAutoRefreshActive) {
+        chartElement.innerHTML = '<div class="d-flex justify-content-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+    }
     
     // Disable refresh button while loading
     const refreshBtn = document.getElementById('refresh-btn');
@@ -1182,8 +1224,8 @@ function refreshBandwidthData() {
         }
         
         if (data.success) {
-            // Display appropriate notifications based on data source
-            if (data.fromCache || data.from_cache) {
+            // Display appropriate notifications based on data source - but only if not in auto-refresh mode or showNotifications is true
+            if ((data.fromCache || data.from_cache) && showNotifications && !isAutoRefreshActive) {
                 showNotification('Utilisation des données en cache: ' + (data.cacheReason || 'Délai d\'actualisation non expiré') + ' (' + (data.cache_time || 'time unknown') + ')', 'info', 5000);
             }
             
@@ -1195,8 +1237,8 @@ function refreshBandwidthData() {
                     const interfaceName = interfaceTraffic.interface || 'all';
                     console.log(`Using interface traffic data from ${interfaceType} interface ${interfaceName}: RX=${interfaceTraffic.rx} bps, TX=${interfaceTraffic.tx} bps`);
                     
-                    // If it's an external interface, show a subtle notification
-                    if (interfaceType === 'external') {
+                    // If it's an external interface, show a subtle notification - but only if not in auto-refresh mode or showNotifications is true
+                    if (interfaceType === 'external' && showNotifications && !isAutoRefreshActive) {
                         showNotification(`Données de trafic en temps réel depuis l'interface externe: ${interfaceName}`, 'info', 3000);
                     }
                 } else {
@@ -1245,45 +1287,6 @@ function refreshBandwidthData() {
                         }
                     }
                 }
-                
-                // Update Average per user (fourth card)
-                const averageCard = metricCards[3];
-                const averageContainer = averageCard.querySelector('.d-flex');
-                const averageRx = data.averageRx || data.average_rx_rate || '0 bps';
-                const averageTx = data.averageTx || data.average_tx_rate || '0 bps';
-                
-                if (averageContainer) {
-                    const rxElement = averageContainer.querySelector('.text-primary');
-                    const txElement = averageContainer.querySelector('.text-success');
-                    
-                    if (rxElement) rxElement.innerHTML = `<i class="uil uil-arrow-down"></i> ${averageRx}`;
-                    if (txElement) txElement.innerHTML = `<i class="uil uil-arrow-up"></i> ${averageTx}`;
-                } else {
-                    // If the container doesn't exist, create it
-                    const cardBody = averageCard.querySelector('.card-body');
-                    if (cardBody) {
-                        const header = cardBody.querySelector('h6');
-                        if (header) {
-                            const container = document.createElement('div');
-                            container.className = 'd-flex justify-content-center align-items-center';
-                            container.innerHTML = `
-                                <div class="text-primary me-3">
-                                    <i class="uil uil-arrow-down"></i> ${averageRx}
-                                </div>
-                                <div class="text-success">
-                                    <i class="uil uil-arrow-up"></i> ${averageTx}
-                                </div>
-                            `;
-                            
-                            // Replace any existing content after the header
-                            while (cardBody.childNodes.length > 1) {
-                                cardBody.removeChild(cardBody.lastChild);
-                            }
-                            
-                            cardBody.appendChild(container);
-                        }
-                    }
-                }
             }
             
             // Update the database totals section
@@ -1308,79 +1311,129 @@ function refreshBandwidthData() {
                 }
             }
             
-            // Update chart data - if chart exists and we have data
-            if (window.realTimeBandwidthChart && data.labels && data.labels.length > 0) {
-                realTimeBandwidthChart.updateOptions({
-                    xaxis: {
-                        categories: data.labels
+            // Process and enhance connection data with user names from the database
+            if (data.connections && data.connections.length > 0) {
+                // Map MAC addresses to user-friendly names
+                data.connections.forEach((conn, index) => {
+                    // If the username is a MAC address, try to display a more friendly name
+                    if (conn.username && conn.username === conn.mac_address) {
+                        // Check if we have user_data with this MAC address
+                        if (data.user_data && data.user_data[conn.mac_address]) {
+                            const userData = data.user_data[conn.mac_address];
+                            // Use full_name or email as a more friendly display name
+                            if (userData.full_name) {
+                                conn.display_name = userData.full_name;
+                            } else if (userData.email) {
+                                conn.display_name = userData.email;
+                            } else {
+                                conn.display_name = `User (${conn.mac_address.substring(0, 8)}...)`;
+                            }
+                        } else {
+                            // If no user data, create a friendlier display for the MAC
+                            conn.display_name = `User (${conn.mac_address.substring(0, 8)}...)`;
+                        }
+                    } else {
+                        // If username is already not a MAC address, use it
+                        conn.display_name = conn.username;
+                    }
+                    
+                    // Update labels array with the display name
+                    if (data.labels && data.labels[index]) {
+                        data.labels[index] = conn.display_name;
                     }
                 });
+            }
+            
+            // Handle chart data update
+            if (data.labels && data.labels.length > 0) {
+                // Check if we have data to display
+                const hasData = data.rxData && data.rxData.length > 0;
                 
-                realTimeBandwidthChart.updateSeries([
-                    {
-                        name: 'Download (Rx)',
-                        data: data.rxData
-                    },
-                    {
-                        name: 'Upload (Tx)',
-                        data: data.txData
+                if (hasData) {
+                    // If chart exists, update it
+                    if (window.realTimeBandwidthChart) {
+                        console.log('Updating existing chart with new data');
+                        
+                        // Update chart data and labels
+                        realTimeBandwidthChart.updateOptions({
+                            xaxis: {
+                                categories: data.labels
+                            }
+                        });
+                        
+                        realTimeBandwidthChart.updateSeries([
+                            {
+                                name: 'Download (Rx)',
+                                data: data.rxData
+                            },
+                            {
+                                name: 'Upload (Tx)',
+                                data: data.txData
+                            }
+                        ]);
+                    } else {
+                        // If chart doesn't exist yet, create it
+                        console.log('Creating new chart with data');
+                        
+                        // Store data for chart creation
+                        realTimeBandwidthData = {
+                            rxData: data.rxData,
+                            txData: data.txData,
+                            labels: data.labels
+                        };
+                        
+                        // Update chart options with new data
+                        realTimeBandwidthOptions.series[0].data = data.rxData;
+                        realTimeBandwidthOptions.series[1].data = data.txData;
+                        realTimeBandwidthOptions.xaxis.categories = data.labels;
+                        
+                        // Create and render the chart
+                        window.realTimeBandwidthChart = new ApexCharts(document.querySelector("#real-time-bandwidth-chart"), realTimeBandwidthOptions);
+                        window.realTimeBandwidthChart.render();
                     }
-                ]);
-            } else if (chartElement && data.labels && data.labels.length > 0) {
-                // If chart doesn't exist yet but we have data, create it
-                realTimeBandwidthData = {
-                    rxData: data.rxData,
-                    txData: data.txData,
-                    labels: data.labels
-                };
-                
-                realTimeBandwidthOptions.series[0].data = data.rxData;
-                realTimeBandwidthOptions.series[1].data = data.txData;
-                realTimeBandwidthOptions.xaxis.categories = data.labels;
-                
-                window.realTimeBandwidthChart = new ApexCharts(document.querySelector("#real-time-bandwidth-chart"), realTimeBandwidthOptions);
-                window.realTimeBandwidthChart.render();
-            } else if (chartElement) {
-                // No active connections
+                } else if (!window.realTimeBandwidthChart) {
+                    // If no data and no chart exists, show a message
+                    chartElement.innerHTML = '<div class="alert alert-info text-center my-4">Aucun utilisateur actif trouvé</div>';
+                }
+            } else if (!window.realTimeBandwidthChart || !isAutoRefreshActive) {
+                // Only show "no active users" message if not in auto-refresh mode or if chart doesn't exist
                 chartElement.innerHTML = '<div class="alert alert-info text-center my-4">Aucun utilisateur actif trouvé</div>';
             }
             
-            // Update table
+            // Update active connections table with user-friendly names
             const tableBody = document.querySelector('table tbody');
-            if (tableBody) {
+            if (tableBody && data.connections && data.connections.length > 0) {
                 tableBody.innerHTML = '';
                 
-                // Get connections from appropriate property
-                const connections = data.connections || data.active_connections || [];
-                
-                if (connections && connections.length > 0) {
-                    connections.forEach(conn => {
-                        tableBody.innerHTML += `
-                            <tr>
-                                <td>${conn.username}</td>
-                                <td>${conn.ip_address}</td>
-                                <td><span class="small text-muted">${conn.mac_address}</span></td>
-                                <td>
-                                    <div class="d-flex flex-column">
-                                        ${conn.rx_rate_raw > 0 ? 
-                                            `<span class="badge bg-primary rounded-pill mb-1">${conn.rx_rate}</span>` : ''}
-                                        <span class="text-primary">${conn.bytes_in_formatted}</span>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="d-flex flex-column">
-                                        ${conn.tx_rate_raw > 0 ? 
-                                            `<span class="badge bg-success rounded-pill mb-1">${conn.tx_rate}</span>` : ''}
-                                        <span class="text-success">${conn.bytes_out_formatted}</span>
-                                    </div>
-                                </td>
-                                <td>${conn.uptime}</td>
-                            </tr>
-                        `;
-                    });
-                } else {
-                    tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Aucun utilisateur actif trouvé</td></tr>';
-                }
+                data.connections.forEach(conn => {
+                    // Use display_name if available, otherwise fall back to username
+                    const displayName = conn.display_name || conn.username || 'Unknown';
+                    
+                    tableBody.innerHTML += `
+                        <tr>
+                            <td>${displayName}</td>
+                            <td>${conn.ip_address}</td>
+                            <td><span class="small text-muted">${conn.mac_address}</span></td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    ${conn.rx_rate_raw > 0 ? 
+                                        `<span class="badge bg-primary rounded-pill mb-1">${conn.rx_rate}</span>` : ''}
+                                    <span class="text-primary">${conn.bytes_in_formatted}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    ${conn.tx_rate_raw > 0 ? 
+                                        `<span class="badge bg-success rounded-pill mb-1">${conn.tx_rate}</span>` : ''}
+                                    <span class="text-success">${conn.bytes_out_formatted}</span>
+                                </div>
+                            </td>
+                            <td>${conn.uptime}</td>
+                        </tr>
+                    `;
+                });
+            } else if (tableBody && (!data.connections || data.connections.length === 0)) {
+                tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4">Aucun utilisateur actif trouvé</td></tr>';
             }
             
             // Calculate total bandwidth for gauge charts
@@ -1409,9 +1462,22 @@ function refreshBandwidthData() {
                 window.uploadGaugeChart.updateSeries([uploadPercentage]);
             }
             
-            // Show success message only for live data
-            if (!data.fromCache && !data.from_cache) {
+            // Show success message only for live data and only if not in auto-refresh mode or showNotifications is true
+            if (!data.fromCache && !data.from_cache && showNotifications && !isAutoRefreshActive) {
                 showNotification(`Données mises à jour à ${new Date().toLocaleTimeString()}`);
+            }
+            
+            // Update the auto-refresh button with current time without showing a notification
+            if (isAutoRefreshActive) {
+                const autoRefreshBtn = document.getElementById('auto-refresh-btn');
+                if (autoRefreshBtn) {
+                    // Add the current time to the button text
+                    const timeString = new Date().toLocaleTimeString();
+                    autoRefreshBtn.setAttribute('title', `Dernière mise à jour: ${timeString}`);
+                    
+                    // Update the page title with last update time
+                    document.title = `Statistiques [${timeString}]`;
+                }
             }
         } else {
             throw new Error(data.message || 'Une erreur inconnue est survenue');
@@ -1425,7 +1491,7 @@ function refreshBandwidthData() {
             refreshBtn.innerHTML = '<i class="uil uil-sync"></i> Actualiser';
         }
         
-        // Provide more specific error message
+        // Provide more specific error message - but only show notification if not in auto-refresh mode or it's a new error
         let errorMessage = 'Erreur lors de la récupération des données';
         if (error.name === 'AbortError') {
             errorMessage = 'La requête a pris trop de temps et a été interrompue (plus de 20 secondes). Vérifiez la connexion à votre routeur MikroTik.';
@@ -1433,7 +1499,8 @@ function refreshBandwidthData() {
             errorMessage += ': ' + error.message;
         }
         
-        if (chartElement) {
+        // Only show error in chart area if not in auto-refresh mode or if chart doesn't exist
+        if (chartElement && (!window.realTimeBandwidthChart || !isAutoRefreshActive)) {
             chartElement.innerHTML = `
                 <div class="alert alert-danger text-center my-4">
                     <p class="mb-2"><i class="uil uil-exclamation-triangle me-2"></i> ${errorMessage}</p>
@@ -1448,12 +1515,18 @@ function refreshBandwidthData() {
                 </div>`;
         }
         
-        showNotification(errorMessage, 'danger', 10000);
+        // Only show error notifications if not in auto-refresh mode or showNotifications is true
+        if (showNotifications || !isAutoRefreshActive) {
+            showNotification(errorMessage, 'danger', 10000);
+        }
         
         // Implement a retry mechanism after 30 seconds if auto-refresh is active
         if (isAutoRefreshActive) {
-            showNotification('Nouvelle tentative prévue dans 30 secondes...', 'info');
-            setTimeout(refreshBandwidthData, 30000);
+            // Only show the retry notification once, not for every failed attempt
+            if (showNotifications) {
+                showNotification('Nouvelle tentative prévue selon le taux d\'actualisation configuré...', 'info');
+            }
+            // Don't set a timeout here - the interval is already running
         }
     });
 }
