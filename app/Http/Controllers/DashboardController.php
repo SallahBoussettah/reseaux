@@ -103,6 +103,14 @@ class DashboardController extends Controller
 
     public function statistics(Request $request)
     {
+        // Check if we need to clear the statistics cache
+        $clearStatsFile = storage_path('framework/cache/data/clear_stats');
+        if (file_exists($clearStatsFile)) {
+            Cache::forget('statistics');
+            unlink($clearStatsFile); // Remove the file after clearing cache
+            \Log::info('Statistics cache cleared via clear_stats file');
+        }
+
         // Initialize variables
         $activeConnections = [];
         $averageRxRate = '0 B/s';
@@ -146,10 +154,21 @@ class DashboardController extends Controller
                 $startOfDay = $date->copy()->startOfDay();
                 $endOfDay = $date->copy()->endOfDay();
                 
-                // Get count of users who logged in on that specific day
-                $userCount = Client::where('last_login_at', '>=', $startOfDay)
-                    ->where('last_login_at', '<=', $endOfDay)
-                    ->count();
+                // Get count of users who logged in on that specific day OR were active
+                $userCount = Client::where(function($query) use ($startOfDay, $endOfDay) {
+                    $query->where('last_login_at', '>=', $startOfDay)
+                          ->where('last_login_at', '<=', $endOfDay);
+                })
+                ->orWhere(function($query) use ($startOfDay, $endOfDay) {
+                    $query->where('created_at', '>=', $startOfDay)
+                          ->where('created_at', '<=', $endOfDay);
+                })
+                ->count();
+                
+                // If today and we have active connections, use that count instead if it's higher
+                if ($i === 0 && isset($activeConnections) && count($activeConnections) > $userCount) {
+                    $userCount = count($activeConnections);
+                }
                 
                 $dailyActiveUsersHistory[] = $userCount;
             }
@@ -164,31 +183,9 @@ class DashboardController extends Controller
             ]);
         });
 
-        // Cache user activity by hour for 1 day
-        $userActivityByHour = Cache::remember('user_activity_by_hour', 86400, function () {
-            $now = now();
-            $startOfDay = $now->copy()->startOfDay();
-            $endOfDay = $now->copy()->endOfDay();
-
-            $userActivityByHour = Client::where('last_login_at', '>=', $startOfDay)
-                ->where('last_login_at', '<=', $endOfDay)
-                ->get()
-                ->groupBy(function ($client) {
-                    return Carbon::parse($client->last_login_at)->format('H');
-                })
-                ->map(function ($clients) {
-                    return $clients->count();
-                });
-
-            // Fill in missing hours with 0
-            $hours = range(0, 23);
-            $filledUserActivityByHour = collect($hours)->mapWithKeys(function ($hour) use ($userActivityByHour) {
-                $formattedHour = str_pad($hour, 2, '0', STR_PAD_LEFT);
-                return [$formattedHour => $userActivityByHour->get($formattedHour, 0)];
-            });
-
-            return $filledUserActivityByHour;
-        });
+        // Get database totals for bandwidth usage
+        $databaseTotals = $this->getDatabaseTotals();
+        $formattedDatabaseTotals = $this->getFormattedDatabaseTotals($databaseTotals);
 
         // Get top users with bandwidth usage
         $topUsers = Client::orderBy('total_downloaded_bytes', 'desc')
@@ -250,7 +247,6 @@ class DashboardController extends Controller
 
         return view('dashboard.statistics', [
             'statistics' => $statistics,
-            'userActivityByHour' => $userActivityByHour,
             'activeConnections' => $activeConnections,
             'averageRxRate' => $averageRxRate,
             'averageTxRate' => $averageTxRate,
@@ -258,11 +254,7 @@ class DashboardController extends Controller
             'totalTxRateFormatted' => $totalTxRateFormatted,
             'topUsers' => $topUsers,
             'bandwidthUsagePerUser' => $bandwidthUsagePerUser,
-            'databaseTotals' => [
-                'downloaded' => $totalDownloadedBytes,
-                'uploaded' => $totalUploadedBytes,
-                'total' => $totalBandwidthUsage
-            ],
+            'databaseTotals' => $databaseTotals,
             'formattedDatabaseTotals' => $formattedDatabaseTotals
         ]);
     }
@@ -569,6 +561,10 @@ class DashboardController extends Controller
             // Get database totals for display
             $databaseTotals = $this->getDatabaseTotals();
             
+            // Get current daily active users count
+            $dailyActiveUsers = Client::where('last_login_at', '>=', now()->subDay())
+                ->count();
+            
             // Update database with bandwidth usage
             $this->updateBandwidthUsageInDatabase($activeConnections);
             
@@ -585,6 +581,7 @@ class DashboardController extends Controller
             $responseData = [
                 'success' => true,
                 'activeUsers' => $userCount,
+                'dailyActiveUsers' => $dailyActiveUsers,
                 'totalRx' => $totalRxRateFormatted,
                 'totalTx' => $totalTxRateFormatted,
                 'total_rx_rate_formatted' => $totalRxRateFormatted,
@@ -603,7 +600,8 @@ class DashboardController extends Controller
                 'timestamp' => now()->timestamp,
                 'source' => 'live',
                 'databaseTotals' => $databaseTotals,
-                'user_data' => $userDataMap, // Include user data for frontend mapping
+                'usersByHour' => $this->getUserActivityByHour(),
+                'user_data' => $userDataMap,
                 'debug' => [
                     'mikrotik_host' => $host,
                     'mikrotik_port' => $port,
@@ -668,15 +666,31 @@ class DashboardController extends Controller
      */
     private function getDatabaseTotals()
     {
-        $totalDownloaded = \App\Models\Client::sum('total_downloaded_bytes');
-        $totalUploaded = \App\Models\Client::sum('total_uploaded_bytes');
-        $totalBandwidth = $totalDownloaded + $totalUploaded;
-        
+        $totalDownloadedBytes = Client::sum('total_downloaded_bytes');
+        $totalUploadedBytes = Client::sum('total_uploaded_bytes');
+        $totalBandwidthUsage = $totalDownloadedBytes + $totalUploadedBytes;
+
         return [
-            'downloaded' => $this->formatBytes($totalDownloaded),
-            'uploaded' => $this->formatBytes($totalUploaded),
-            'total' => $this->formatBytes($totalBandwidth)
+            'downloaded' => $totalDownloadedBytes,
+            'uploaded' => $totalUploadedBytes,
+            'total' => $totalBandwidthUsage
         ];
+    }
+
+    /**
+     * Reset the statistics cache to ensure fresh data
+     * This can be called when users connect or disconnect
+     */
+    private function resetStatisticsCache()
+    {
+        try {
+            Cache::forget('statistics');
+            \Log::info('Statistics cache cleared to ensure fresh data');
+            return true;
+        } catch (\Exception $e) {
+            \Log::error('Error clearing statistics cache: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
@@ -688,6 +702,7 @@ class DashboardController extends Controller
     private function updateBandwidthUsageInDatabase($activeConnections)
     {
         try {
+            $updated = false;
             foreach ($activeConnections as $connection) {
                 // Skip if no MAC address or bytes data
                 if (!isset($connection['mac_address']) || 
@@ -713,10 +728,18 @@ class DashboardController extends Controller
                     // We'll update the database only if the new values are higher than existing ones
                     if ($bytesIn > 0 && $bytesIn > $client->total_downloaded_bytes) {
                         $client->total_downloaded_bytes = $bytesIn;
+                        $updated = true;
                     }
                     
                     if ($bytesOut > 0 && $bytesOut > $client->total_uploaded_bytes) {
                         $client->total_uploaded_bytes = $bytesOut;
+                        $updated = true;
+                    }
+                    
+                    // Update last_login_at if not set to track active users
+                    if (empty($client->last_login_at)) {
+                        $client->last_login_at = now();
+                        $updated = true;
                     }
                     
                     // Save changes if there are any
@@ -730,6 +753,11 @@ class DashboardController extends Controller
                 } else {
                     \Log::warning("Client with MAC address {$macAddress} not found in database");
                 }
+            }
+            
+            // If we updated any clients, reset the statistics cache
+            if ($updated) {
+                $this->resetStatisticsCache();
             }
         } catch (\Exception $e) {
             \Log::error('Error updating bandwidth usage in database: ' . $e->getMessage());
@@ -841,5 +869,48 @@ class DashboardController extends Controller
         } catch (\Exception $e) {
             \Log::error('Error updating historical bandwidth usage: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Get user activity by hour for the current day
+     */
+    private function getUserActivityByHour()
+    {
+        $now = now();
+        $startOfDay = $now->copy()->startOfDay();
+        $endOfDay = $now->copy()->endOfDay();
+        $currentHour = $now->format('H');
+
+        $userActivityByHour = Client::where('last_login_at', '>=', $startOfDay)
+            ->where('last_login_at', '<=', $endOfDay)
+            ->get()
+            ->groupBy(function ($client) {
+                return Carbon::parse($client->last_login_at)->format('H');
+            })
+            ->map(function ($clients) {
+                return $clients->count();
+            });
+
+        // Fill in missing hours with 0
+        $hours = range(0, 23);
+        $filledUserActivityByHour = collect($hours)->mapWithKeys(function ($hour) use ($userActivityByHour, $currentHour) {
+            $formattedHour = str_pad($hour, 2, '0', STR_PAD_LEFT);
+            // Always show at least one user for the current hour (someone is viewing the dashboard)
+            if ($formattedHour === $currentHour) {
+                return [$formattedHour => max(1, $userActivityByHour->get($formattedHour, 0))];
+            }
+            return [$formattedHour => $userActivityByHour->get($formattedHour, 0)];
+        });
+
+        return $filledUserActivityByHour;
+    }
+
+    private function getFormattedDatabaseTotals($databaseTotals)
+    {
+        return [
+            'downloaded' => $this->formatBytes($databaseTotals['downloaded']),
+            'uploaded' => $this->formatBytes($databaseTotals['uploaded']),
+            'total' => $this->formatBytes($databaseTotals['total'])
+        ];
     }
 }

@@ -241,9 +241,9 @@
                                             <h2 class="mb-0 fw-bold text-primary">
                                                 {{ $formattedDatabaseTotals['downloaded'] }}
                                             </h2>
+                                        </div>
                                     </div>
-                                    </div>
-                                    </div>
+                                </div>
                                 <div class="col-md-4 mb-3 mb-md-0">
                                     <div class="card border-0 bg-light h-100 metric-card">
                                         <div class="card-body text-center">
@@ -337,18 +337,18 @@
                                 <td><span class="small text-muted">{{ $connection['mac_address'] }}</span></td>
                                 <td>
                                     <div class="d-flex flex-column">
-                                        <!-- @if((int)$connection['rx_rate_raw'] > 0)
-                                            <span class="badge bg-primary rounded-pill mb-1">{{ $connection['rx_rate'] }}</span>
-                                        @endif -->
-                                        <span class="text-primary">{{ $connection['bytes_in_formatted'] }}</span>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="d-flex flex-column">
                                         @if((int)$connection['tx_rate_raw'] > 0)
                                             <span class="badge bg-success rounded-pill mb-1">{{ $connection['tx_rate'] }}</span>
                                         @endif
                                         <span class="text-success">{{ $connection['bytes_out_formatted'] }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column">
+                                        <!-- @if((int)$connection['rx_rate_raw'] > 0)
+                                            <span class="badge bg-primary rounded-pill mb-1">{{ $connection['rx_rate'] }}</span>
+                                        @endif -->
+                                        <span class="text-primary">{{ $connection['bytes_in_formatted'] }}</span>
                                     </div>
                                 </td>
                                 <td>{{ $connection['uptime'] }}</td>
@@ -408,6 +408,8 @@
 @endsection
 
 @section('scripts')
+<!-- Required libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.3/dragula.min.js"></script>
 <!-- Defer non-critical scripts to improve page load speed -->
 <script>
 // Load crucial functionality first - only the bare minimum needed for user interaction
@@ -551,7 +553,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Set up recurring updates
         setInterval(() => {
-            console.log('Automatic database update triggered');
             updateBandwidthUsageInDatabase();
         }, dbUpdateInterval);
         
@@ -564,9 +565,6 @@ document.addEventListener('DOMContentLoaded', function() {
 function formatBandwidth(bytes) {
     // Ensure bytes is treated as a number
     bytes = Number(bytes);
-    
-    // Debug the incoming value
-    console.log('Formatting bandwidth value:', bytes);
     
     // Handle zero value case explicitly
     if (bytes === 0 || isNaN(bytes)) {
@@ -704,16 +702,39 @@ function initializePrimaryCharts() {
 
 function initializeSecondaryCharts() {
     // Daily Active Users Chart - the most complex chart with 30 days of data
-var dailyActiveUsers = @json($statistics->pluck('daily_active_users'));
+    var dailyActiveUsers = [];
 
-// Get the last 30 days in date format
-var last30Days = [...Array(30).keys()].map(i => {
-    let date = new Date();
+    // Get the daily active users history from statistics
+    @if(!empty($statistics) && $statistics->count() > 0 && isset($statistics->first()->daily_active_users_history))
+        dailyActiveUsers = @json($statistics->first()->daily_active_users_history);
+        // Ensure at least one data point is visible
+        if (dailyActiveUsers && dailyActiveUsers.length > 0) {
+            let hasNonZeroValue = false;
+            for (let i = 0; i < dailyActiveUsers.length; i++) {
+                if (dailyActiveUsers[i] > 0) {
+                    hasNonZeroValue = true;
+                    break;
+                }
+            }
+            if (!hasNonZeroValue) {
+                // If all values are zero, add at least one user for today
+                dailyActiveUsers[dailyActiveUsers.length - 1] = 1;
+            }
+        }
+    @else
+        // Fallback to empty array with at least one user for today
+        dailyActiveUsers = Array(30).fill(0);
+        dailyActiveUsers[29] = 1; // Today has at least one user (you)
+    @endif
+
+    // Get the last 30 days in date format
+    var last30Days = [...Array(30).keys()].map(i => {
+        let date = new Date();
         date.setDate(date.getDate() - (29 - i));
-    return date;
-});
+        return date;
+    });
 
-// Map days to French day names
+    // Map days to French day names
     var dayNamesInFrench = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
     
     // Map last 30 days to day names in French with dates
@@ -721,19 +742,42 @@ var last30Days = [...Array(30).keys()].map(i => {
         return dayNamesInFrench[date.getDay()] + ' ' + date.getDate() + '/' + (date.getMonth() + 1);
     });
 
-let dailyOptions = {
-    series: [{
+    let dailyOptions = {
+        series: [{
             name: 'Utilisateurs actifs',
-        data: dailyActiveUsers
-    }],
-    chart: {
-        height: 350,
+            data: dailyActiveUsers
+        }],
+        chart: {
+            height: 350,
             type: 'area',
-            toolbar: { show: false },
+            toolbar: {
+                show: false
+            },
             fontFamily: 'inherit',
-            animations: { enabled: false }
+            animations: {
+                enabled: true,
+                easing: 'easeinout',
+                speed: 800,
+                animateGradually: {
+                    enabled: true,
+                    delay: 150
+                },
+                dynamicAnimation: {
+                    enabled: true,
+                    speed: 350
+                }
+            },
+            dropShadow: {
+                enabled: true,
+                top: 3,
+                left: 2,
+                blur: 4,
+                opacity: 0.1
+            }
         },
-        dataLabels: { enabled: false },
+        dataLabels: {
+            enabled: false
+        },
         stroke: {
             curve: 'smooth',
             width: 3
@@ -747,32 +791,83 @@ let dailyOptions = {
                 opacityTo: 0.2,
                 stops: [0, 90, 100]
             }
-    },
-    xaxis: {
+        },
+        xaxis: {
             categories: frenchDayLabels,
             labels: {
                 rotate: -45,
-                style: { fontSize: '12px' }
+                style: {
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    colors: '#718096'
+                }
+            },
+            axisBorder: {
+                show: false
+            },
+            axisTicks: {
+                show: false
             }
-    },
-    yaxis: {
-            title: { text: 'Nombre d\'utilisateurs' }
+        },
+        yaxis: {
+            title: {
+                text: 'Nombre d\'utilisateurs',
+                style: {
+                    fontSize: '13px',
+                    fontWeight: 500
+                }
+            },
+            min: 0,
+            forceNiceScale: true,
+            labels: {
+                style: {
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    colors: ['#718096']
+                },
+                formatter: function(val) {
+                    return Math.round(val);
+                }
+            }
         },
         markers: {
             size: 4,
-            strokeWidth: 0,
-            hover: { size: 6 }
+            colors: ['#4361ee'],
+            strokeColors: '#fff',
+            strokeWidth: 2,
+            hover: {
+                size: 7
+            }
         },
         tooltip: {
             theme: 'light',
             y: {
-                formatter: function (val) {
+                formatter: function(val) {
                     return val + ' utilisateurs';
+                },
+                title: {
+                    formatter: (seriesName) => seriesName,
                 }
+            },
+            x: {
+                show: true
+            },
+            marker: {
+                show: true
+            }
+        },
+        grid: {
+            borderColor: '#e2e8f0',
+            strokeDashArray: 4,
+            padding: {
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 10
             }
         }
     };
-    
+        
     var bandwidthUsage = @json($bandwidthUsagePerUser);
 
     let bandwidthOptions = {
@@ -834,11 +929,16 @@ let dailyOptions = {
             horizontalAlign: 'right'
         }
     };
-    
+        
     // User activity by hour chart
     var userActivity = [];
     @if(!empty($statistics) && $statistics->count() > 0 && isset($statistics->first()->users_by_hour))
         userActivity = Object.values(@json($statistics->first()->users_by_hour));
+    @else
+        // Create default array with 24 hours (0-23) with at least 1 user for current hour
+        userActivity = Array(24).fill(0);
+        const currentHour = new Date().getHours();
+        userActivity[currentHour] = 1; // At least one user for current hour
     @endif
 
     let activityOptions = {
@@ -851,51 +951,187 @@ let dailyOptions = {
             type: 'bar',
             toolbar: { show: false },
             fontFamily: 'inherit',
-            animations: { enabled: false }
+            animations: { 
+                enabled: true,
+                easing: 'easeinout',
+                speed: 800,
+                animateGradually: {
+                    enabled: true,
+                    delay: 150
+                },
+                dynamicAnimation: {
+                    enabled: true,
+                    speed: 350
+                }
+            },
+            dropShadow: {
+                enabled: true,
+                top: 3,
+                left: 2,
+                blur: 4,
+                opacity: 0.1
+            }
         },
         plotOptions: {
             bar: {
                 borderRadius: 4,
-                columnWidth: '60%',
-                distributed: false
+                columnWidth: '70%',
+                distributed: false,
+                rangeBarOverlap: true,
+                rangeBarGroupRows: false,
+                colors: {
+                    ranges: [{
+                        from: 0,
+                        to: 0,
+                        color: undefined
+                    }],
+                    backgroundBarColors: [],
+                    backgroundBarOpacity: 1,
+                },
+                dataLabels: {
+                    position: 'top'
+                }
             }
         },
         colors: ['#4361ee'],
-        dataLabels: { enabled: false },
+        fill: {
+            type: 'gradient',
+            gradient: {
+                shade: 'light',
+                type: 'vertical',
+                shadeIntensity: 0.1,
+                gradientToColors: ['#2bc0e4'],
+                inverseColors: false,
+                opacityFrom: 1,
+                opacityTo: 0.9,
+            }
+        },
+        dataLabels: { 
+            enabled: true,
+            style: { 
+                fontSize: '12px',
+                fontWeight: 500,
+                colors: ['#444']
+            },
+            offsetY: -20,
+            formatter: function(val) {
+                if (val === 0) return '';
+                return val;
+            }
+        },
         xaxis: {
             categories: [...Array(24).keys()].map(hour => hour + 'h'),
-            title: { text: 'Heure de la journée' },
+            title: { 
+                text: 'Heure de la journée',
+                style: {
+                    fontSize: '13px',
+                    fontWeight: 500
+                }
+            },
             labels: {
-                style: { fontSize: '12px' }
+                style: { 
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    colors: '#718096'
+                }
+            },
+            axisBorder: {
+                show: false
+            },
+            axisTicks: {
+                show: false
             }
         },
         yaxis: {
-            title: { text: 'Nombre d\'utilisateurs' }
+            title: { 
+                text: 'Nombre d\'utilisateurs',
+                style: {
+                    fontSize: '13px',
+                    fontWeight: 500
+                }
+            },
+            min: 0,
+            forceNiceScale: true,
+            labels: {
+                style: {
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    colors: ['#718096']
+                },
+                formatter: function(val) {
+                    return Math.round(val);
+                }
+            }
         },
         tooltip: {
             theme: 'light',
             y: {
                 formatter: function (val) {
                     return val + ' utilisateurs';
+                },
+                title: {
+                    formatter: (seriesName) => seriesName,
+                }
+            },
+            marker: {
+                show: true
+            }
+        },
+        grid: {
+            borderColor: '#e2e8f0',
+            strokeDashArray: 4,
+            padding: {
+                top: 20,
+                right: 0,
+                bottom: 0,
+                left: 10
+            }
+        },
+        states: {
+            hover: {
+                filter: {
+                    type: 'darken',
+                    value: 0.9
+                }
+            },
+            active: {
+                filter: {
+                    type: 'darken',
+                    value: 0.85
                 }
             }
-        }
+        },
+        responsive: [
+            {
+                breakpoint: 480,
+                options: {
+                    chart: {
+                        height: 250
+                    },
+                    plotOptions: {
+                        bar: {
+                            columnWidth: '90%'
+                        }
+                    }
+                }
+            }
+        ]
     };
-    
+        
     // Create the charts in the background
     setTimeout(() => {
-        let dailyChart = new ApexCharts(document.querySelector("#daily-active-users-chart"), dailyOptions);
-        dailyChart.render();
+        window.dailyActiveUsersChart = new ApexCharts(document.querySelector("#daily-active-users-chart"), dailyOptions);
+        window.dailyActiveUsersChart.render();
     }, 0);
-    
+        
     setTimeout(() => {
         let bandwidthChart = new ApexCharts(document.querySelector("#bandwidth-usage-chart"), bandwidthOptions);
         bandwidthChart.render();
     }, 200);
-    
+        
     setTimeout(() => {
-    let activityChart = new ApexCharts(document.querySelector("#user-activity-chart"), activityOptions);
-    activityChart.render();
+        window.userActivityChart = new ApexCharts(document.querySelector("#user-activity-chart"), activityOptions);
+        window.userActivityChart.render();
         
         // Enable animations now that all charts are loaded
         enableAllChartAnimations();
@@ -1069,7 +1305,6 @@ function refreshBandwidthData(showNotifications = true) {
     
     // Debug timestamp to ensure we're not getting cached data
     const timestamp = new Date().getTime();
-    console.log('Refreshing bandwidth data at:', new Date().toLocaleTimeString());
     
     // Construct URL with force refresh
     const url = '{{ route('bandwidth.data') }}' + 
@@ -1095,9 +1330,6 @@ function refreshBandwidthData(showNotifications = true) {
         return response.json();
     })
     .then(data => {
-        // Debug the received data
-        console.log('Received bandwidth data:', data);
-        
         // Re-enable refresh button
         if (refreshBtn) {
             refreshBtn.disabled = false;
@@ -1116,19 +1348,15 @@ function refreshBandwidthData(showNotifications = true) {
                 if (interfaceTraffic.success) {
                     const interfaceType = interfaceTraffic.type || 'unknown';
                     const interfaceName = interfaceTraffic.interface || 'all';
-                    console.log(`Using interface traffic data from ${interfaceType} interface ${interfaceName}: RX=${interfaceTraffic.rx} bps, TX=${interfaceTraffic.tx} bps`);
                     
                     // Also log formatted values for better debugging
                     const formattedRx = formatBandwidth(interfaceTraffic.rx || 0);
                     const formattedTx = formatBandwidth(interfaceTraffic.tx || 0);
-                    console.log(`Formatted interface traffic: RX=${formattedRx}, TX=${formattedTx}`);
                     
                     // If it's an external interface, show a subtle notification - but only if not in auto-refresh mode or showNotifications is true
                     if (interfaceType === 'external' && showNotifications && !isAutoRefreshActive) {
                         showNotification(`Données de trafic en temps réel depuis l'interface externe: ${interfaceName}`, 'info', 3000);
                     }
-                } else {
-                    console.log('Interface traffic data not available, using connection data instead');
                 }
             }
             
@@ -1149,7 +1377,6 @@ function refreshBandwidthData(showNotifications = true) {
                 const totalDownloadValue = totalDownloadCard.querySelector('h2');
                 if (totalDownloadValue) {
                     const downloadValue = data.totalRx || data.total_rx_rate_formatted || '0 bps';
-                    console.log('Setting download value to:', downloadValue);
                     totalDownloadValue.innerHTML = downloadValue;
                     if (data.totalRxBytes) {
                         const smallText = totalDownloadCard.querySelector('p.small');
@@ -1164,7 +1391,6 @@ function refreshBandwidthData(showNotifications = true) {
                 const totalUploadValue = totalUploadCard.querySelector('h2');
                 if (totalUploadValue) {
                     const uploadValue = data.totalTx || data.total_tx_rate_formatted || '0 bps';
-                    console.log('Setting upload value to:', uploadValue);
                     totalUploadValue.innerHTML = uploadValue;
                     if (data.totalTxBytes) {
                         const smallText = totalUploadCard.querySelector('p.small');
@@ -1210,13 +1436,11 @@ function refreshBandwidthData(showNotifications = true) {
                 // Calculate max network speed in bps
                 const maxNetworkSpeed = networkCapacityMbps * 1000000; // Convert Mbps to bps
                 
-                console.log(`Network bandwidth metrics - Download: ${totalRxRateRaw} bps, Upload: ${totalTxRateRaw} bps, Max Capacity: ${maxNetworkSpeed} bps (${networkCapacityMbps} Mbps)`);
                 
                 // Calculate percentage of network capacity (max 100%)
                 const downloadPercentage = Math.min(100, Math.max(0, (totalRxRateRaw / maxNetworkSpeed) * 100));
                 const uploadPercentage = Math.min(100, Math.max(0, (totalTxRateRaw / maxNetworkSpeed) * 100));
                 
-                console.log(`Network usage percentages - Download: ${downloadPercentage.toFixed(2)}%, Upload: ${uploadPercentage.toFixed(2)}%`);
                 
                 // Update the gauge charts
                 window.downloadGaugeChart.updateSeries([downloadPercentage]);
@@ -1226,6 +1450,60 @@ function refreshBandwidthData(showNotifications = true) {
             // Show success message only for live data and only if not in auto-refresh mode or showNotifications is true
             if (!data.fromCache && !data.from_cache && showNotifications && !isAutoRefreshActive) {
                 showNotification(`Données mises à jour à ${new Date().toLocaleTimeString()}`);
+            }
+            
+            // Update the daily active users chart if user count has changed
+            if (data.dailyActiveUsers && window.dailyActiveUsersChart) {
+                // Update today's value in the chart only if the new count is higher
+                const dailyData = window.dailyActiveUsersChart.w.config.series[0].data;
+                if (Array.isArray(dailyData) && dailyData.length > 0) {
+                    // Update the last value (today) only if the new value is higher than current value
+                    const currentValue = dailyData[dailyData.length - 1];
+                    const newValue = data.dailyActiveUsers;
+                    
+                    // Only update if the new value is higher (preserving historical maximum)
+                    if (newValue > currentValue) {
+                        dailyData[dailyData.length - 1] = newValue;
+                        window.dailyActiveUsersChart.updateSeries([{
+                            name: 'Utilisateurs actifs',
+                            data: dailyData
+                        }]);
+                        
+                        // Optionally show a notification when a new maximum is reached
+                        if (showNotifications && !isAutoRefreshActive) {
+                            showNotification(`Nouveau record d'utilisateurs actifs aujourd'hui: ${newValue}`, 'success');
+                        }
+                    }
+                }
+            }
+            
+            // Update the user activity by hour chart if available
+            if (data.usersByHour && window.userActivityChart) {
+                // Convert usersByHour object to array
+                let hourlyData;
+                if (Array.isArray(data.usersByHour)) {
+                    hourlyData = data.usersByHour;
+                } else {
+                    // If it's an object with hour keys, convert to array
+                    hourlyData = Array(24).fill(0);
+                    for (const hour in data.usersByHour) {
+                        if (hour >= 0 && hour < 24) {
+                            hourlyData[hour] = data.usersByHour[hour];
+                        }
+                    }
+                }
+                
+                // Ensure current hour has at least 1 user (someone is viewing the dashboard)
+                const currentHour = new Date().getHours();
+                if (hourlyData[currentHour] < 1) {
+                    hourlyData[currentHour] = 1;
+                }
+                
+                // Update the chart
+                window.userActivityChart.updateSeries([{
+                    name: 'Activité utilisateurs',
+                    data: hourlyData
+                }]);
             }
             
             // Update the auto-refresh button with current time without showing a notification
@@ -1245,7 +1523,6 @@ function refreshBandwidthData(showNotifications = true) {
         }
     })
     .catch(error => {
-        console.error('Error:', error);
         
         if (refreshBtn) {
             refreshBtn.disabled = false;
@@ -1390,7 +1667,6 @@ function updateBandwidthUsageInDatabase() {
         }
     })
     .catch(error => {
-        console.error('Error updating bandwidth usage:', error);
         showNotification('Erreur lors de la mise à jour des données: ' + error.message, 'danger', 5000);
     });
 }
