@@ -131,6 +131,7 @@ class DashboardController extends Controller
             $startOfMonth = $now->copy()->startOfMonth();
             $endOfMonth = $now->copy()->endOfMonth();
 
+            // Get current daily and monthly active users
             $dailyActiveUsers = Client::where('last_login_at', '>=', now()->subDay())
                 ->count();
 
@@ -138,10 +139,27 @@ class DashboardController extends Controller
                 ->where('last_login_at', '<=', $endOfMonth)
                 ->count();
 
+            // Generate data for daily active users for the past 30 days
+            $dailyActiveUsersHistory = [];
+            for ($i = 29; $i >= 0; $i--) {
+                $date = now()->subDays($i);
+                $startOfDay = $date->copy()->startOfDay();
+                $endOfDay = $date->copy()->endOfDay();
+                
+                // Get count of users who logged in on that specific day
+                $userCount = Client::where('last_login_at', '>=', $startOfDay)
+                    ->where('last_login_at', '<=', $endOfDay)
+                    ->count();
+                
+                $dailyActiveUsersHistory[] = $userCount;
+            }
+
             return collect([
                 [
                     'daily_active_users' => $dailyActiveUsers,
                     'monthly_active_users' => $monthlyActiveUsers,
+                    'daily_active_users_history' => $dailyActiveUsersHistory,
+                    'users_by_hour' => $this->getUserActivityByHour()
                 ]
             ]);
         });
@@ -427,7 +445,7 @@ class DashboardController extends Controller
             \Log::info("Attempting to connect to MikroTik at {$host}:{$port} with user {$user}");
             \Log::info("Connection parameters: Host={$host}, Port={$port}, User={$user}, Pass=****");
             
-            // Connect to MikroTik with appropriate settings from the environment
+            // Connect to MikroTik with approptriate settings from the environment
             $mikrotikClient = new RouterOSAPI([
                 'host' => $host,
                 'user' => $user,

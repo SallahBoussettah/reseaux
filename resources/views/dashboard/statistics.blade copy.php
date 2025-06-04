@@ -304,6 +304,14 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Real-time bandwidth usage chart -->
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h6 class="mb-3">Utilisation de la bande passante par utilisateur en temps réel</h6>
+                        <div id="real-time-bandwidth-chart" style="height: 300px;"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -410,6 +418,118 @@
 @section('scripts')
 <!-- Defer non-critical scripts to improve page load speed -->
 <script>
+// Define base chart objects and data structures but don't initialize charts yet
+let realTimeBandwidthData = {
+    rxData: [
+        @foreach($activeConnections as $connection)
+            {{ $connection['rx_rate_raw'] ?? 0 }},
+        @endforeach
+    ],
+    txData: [
+        @foreach($activeConnections as $connection)
+            {{ $connection['tx_rate_raw'] ?? 0 }},
+        @endforeach
+    ],
+    labels: [
+        @foreach($activeConnections as $connection)
+            '{{ $connection['username'] ?? 'unknown' }}',
+        @endforeach
+    ]
+};
+
+// Store chart configurations but don't render yet
+let realTimeBandwidthOptions = {
+    series: [{
+        name: 'Download (Rx)',
+        data: realTimeBandwidthData.rxData
+    }, {
+        name: 'Upload (Tx)',
+        data: realTimeBandwidthData.txData
+    }],
+    chart: {
+        type: 'bar',
+        height: 300,
+        stacked: false,
+        toolbar: {
+            show: true
+        },
+        zoom: {
+            enabled: true
+        },
+        fontFamily: 'inherit',
+        animations: {
+            enabled: true // Enable animations for smoother updates
+        }
+    },
+    responsive: [{
+        breakpoint: 480,
+        options: {
+            legend: {
+                position: 'bottom',
+                offsetX: -10,
+                offsetY: 0
+            }
+        }
+    }],
+    plotOptions: {
+        bar: {
+            horizontal: false,
+            columnWidth: '55%',
+            borderRadius: 2,
+            dataLabels: {
+                position: 'top'
+            }
+        },
+    },
+    xaxis: {
+        categories: realTimeBandwidthData.labels,
+        labels: {
+            style: {
+                fontSize: '12px'
+            }
+        }
+    },
+    yaxis: {
+        min: 0,
+        forceNiceScale: true,
+        logarithmic: false,
+        labels: {
+            formatter: function(val) {
+                return formatBandwidth(val);
+            }
+        }
+    },
+    legend: {
+        position: 'top',
+        horizontalAlign: 'right',
+        fontSize: '14px'
+    },
+    fill: {
+        opacity: 1
+    },
+    colors: ['#4361ee', '#2bcd72'],
+    tooltip: {
+        y: {
+            formatter: function(val) {
+                console.log('Tooltip formatting value during init:', val);
+                return formatBandwidth(val);
+            }
+        }
+    },
+    dataLabels: {
+        enabled: true,
+        formatter: function(val) {
+            console.log('Data label formatting value during init:', val);
+            return formatBandwidth(val);
+        },
+        offsetY: -20,
+        style: {
+            fontSize: '12px',
+            colors: ["#304758"]
+        }
+    }
+};
+
 // Load crucial functionality first - only the bare minimum needed for user interaction
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize UI event handlers immediately
@@ -700,6 +820,28 @@ function initializePrimaryCharts() {
     
     downloadGaugeChart.render();
     uploadGaugeChart.render();
+    
+    // Create the real-time bandwidth chart if we have data
+    if (realTimeBandwidthData.labels.length > 0) {
+        // Log the initial chart data for debugging
+        console.log('Initial chart data:');
+        console.log('Labels:', realTimeBandwidthData.labels);
+        console.log('RX data:', realTimeBandwidthData.rxData);
+        console.log('TX data:', realTimeBandwidthData.txData);
+        
+        // Check if all values are zero
+        const allZeroRx = realTimeBandwidthData.rxData.every(val => val === 0);
+        const allZeroTx = realTimeBandwidthData.txData.every(val => val === 0);
+        
+        if (allZeroRx && allZeroTx) {
+            console.log('All bandwidth values are zero - will still display the chart with zero values');
+        }
+        
+        window.realTimeBandwidthChart = new ApexCharts(document.querySelector("#real-time-bandwidth-chart"), realTimeBandwidthOptions);
+        realTimeBandwidthChart.render();
+    } else {
+        document.getElementById('real-time-bandwidth-chart').innerHTML = '<div class="alert alert-info text-center my-4">Aucune connexion active pour afficher des données en temps réel</div>';
+    }
 }
 
 function initializeSecondaryCharts() {
@@ -904,6 +1046,12 @@ let dailyOptions = {
 
 // Function to enable animations once everything is loaded
 function enableAllChartAnimations() {
+    if (window.realTimeBandwidthChart) {
+        window.realTimeBandwidthChart.updateOptions({
+            chart: { animations: { enabled: true } }
+        });
+    }
+    
     if (window.downloadGaugeChart) {
         window.downloadGaugeChart.updateOptions({
             chart: { animations: { enabled: true } }
@@ -1056,6 +1204,15 @@ function showNotification(message, type = 'success', duration = 3000) {
 
 // Function to refresh bandwidth data via AJAX
 function refreshBandwidthData(showNotifications = true) {
+    // Get chart element
+    const chartElement = document.getElementById('real-time-bandwidth-chart');
+    if (!chartElement) return; // Prevent errors if element doesn't exist yet
+    
+    // Only show loading indicator if not in auto-refresh mode
+    if (!isAutoRefreshActive) {
+    chartElement.innerHTML = '<div class="d-flex justify-content-center py-5"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+    }
+    
     // Disable refresh button while loading
     const refreshBtn = document.getElementById('refresh-btn');
     if (refreshBtn) {
@@ -1127,7 +1284,7 @@ function refreshBandwidthData(showNotifications = true) {
                     if (interfaceType === 'external' && showNotifications && !isAutoRefreshActive) {
                         showNotification(`Données de trafic en temps réel depuis l'interface externe: ${interfaceName}`, 'info', 3000);
                     }
-                } else {
+            } else {
                     console.log('Interface traffic data not available, using connection data instead');
                 }
             }
@@ -1197,6 +1354,214 @@ function refreshBandwidthData(showNotifications = true) {
                 }
             }
             
+            // Process and enhance connection data with user names from the database
+            if (data.connections && data.connections.length > 0) {
+                // Map MAC addresses to user-friendly names
+                data.connections.forEach((conn, index) => {
+                    // If the username is a MAC address, try to display a more friendly name
+                    if (conn.username && conn.username === conn.mac_address) {
+                        // Check if we have user_data with this MAC address
+                        if (data.user_data && data.user_data[conn.mac_address]) {
+                            const userData = data.user_data[conn.mac_address];
+                            // Use full_name or email as a more friendly display name
+                            if (userData.full_name) {
+                                conn.display_name = userData.full_name;
+                            } else if (userData.email) {
+                                conn.display_name = userData.email;
+                } else {
+                                conn.display_name = `User (${conn.mac_address.substring(0, 8)}...)`;
+                            }
+                        } else {
+                            // If no user data, create a friendlier display for the MAC
+                            conn.display_name = `User (${conn.mac_address.substring(0, 8)}...)`;
+                        }
+                    } else {
+                        // If username is already not a MAC address, use it
+                        conn.display_name = conn.username;
+                    }
+                    
+                    // Update labels array with the display name
+                    if (data.labels && data.labels[index]) {
+                        data.labels[index] = conn.display_name;
+                    }
+                });
+            }
+            
+            // Prepare chart data - ensure we have valid values for the chart
+            if (data.rxData && data.txData) {
+                // Log the raw RX/TX data for debugging
+                console.log('Raw RX data:', data.rxData);
+                console.log('Raw TX data:', data.txData);
+                
+                // Use actual values without minimum thresholds
+                data.chartRxData = [...data.rxData];
+                data.chartTxData = [...data.txData];
+                
+                // If we have interface traffic data available and all chart values are zero,
+                // use the interface data directly for the first/only active user
+                if (data.debug && data.debug.interface_traffic && 
+                    data.debug.interface_traffic.success &&
+                    data.chartRxData.every(val => val === 0) && 
+                    data.chartTxData.every(val => val === 0) && 
+                    data.labels && data.labels.length > 0) {
+                    
+                    console.log('Using interface traffic data for chart instead of zero values');
+                    const rxRate = data.debug.interface_traffic.rx || 0;
+                    const txRate = data.debug.interface_traffic.tx || 0;
+                    
+                    // If we have actual traffic but chart shows zeros, update the first user's data
+                    if ((rxRate > 0 || txRate > 0) && data.chartRxData.length > 0) {
+                        console.log(`Updating chart data with interface values: RX=${rxRate}, TX=${txRate}`);
+                        data.chartRxData[0] = rxRate;
+                        data.chartTxData[0] = txRate;
+                    }
+                }
+                
+                console.log('Chart RX data after processing:', data.chartRxData);
+                console.log('Chart TX data after processing:', data.chartTxData);
+            }
+            
+            // Handle chart data update
+            if (data.labels && data.labels.length > 0) {
+                // Check if we have data to display
+                let hasData = data.connections && data.connections.length > 0;
+                
+                // Special case - if we have interface data but no active connections with bandwidth
+                if (data.debug && data.debug.interface_traffic && 
+                    data.debug.interface_traffic.success && 
+                    (!hasData || (data.chartRxData.every(val => val === 0) && data.chartTxData.every(val => val === 0)))) {
+                    
+                    // Create synthetic data for display
+                    const rxRate = data.debug.interface_traffic.rx || 0;
+                    const txRate = data.debug.interface_traffic.tx || 0;
+                    
+                    if (rxRate > 0 || txRate > 0) {
+                        console.log('Creating synthetic data point for interface traffic');
+                        // If we have only one label, use that
+                        if (!data.chartRxData || data.chartRxData.length === 0) {
+                            data.chartRxData = [rxRate];
+                            data.chartTxData = [txRate];
+                            
+                            // Use current label or "Active User" if none
+                            if (!data.labels || data.labels.length === 0) {
+                                data.labels = ['Active User'];
+                            }
+                            
+                            hasData = true;
+                        }
+                    }
+                }
+                
+                if (hasData) {
+                    // Debug the chart data being sent
+                    console.log('Chart data being sent to chart:');
+                    console.log('Labels:', data.labels);
+                    console.log('RX data:', data.chartRxData || data.rxData);
+                    console.log('TX data:', data.chartTxData || data.txData);
+                    
+                    // If chart exists, update it
+                    if (window.realTimeBandwidthChart) {
+                        console.log('Updating existing chart with new data');
+                        
+                        // Log the actual data going into the chart for debugging
+                        console.log('Final chart data being used:');
+                        console.log('- Labels:', data.labels);
+                        console.log('- RX data:', data.chartRxData || data.rxData);
+                        console.log('- TX data:', data.chartTxData || data.txData);
+                        
+                        // Check if all values are still zero despite having interface data
+                        const allZeroRx = (data.chartRxData || data.rxData).every(val => Number(val) === 0);
+                        const allZeroTx = (data.chartTxData || data.txData).every(val => Number(val) === 0);
+                        
+                        if (allZeroRx && allZeroTx && data.debug && data.debug.interface_traffic && data.debug.interface_traffic.success) {
+                            // Force using interface values for the chart when all per-user values are zero
+                            console.log('Overriding chart data with interface traffic data since all values are zero');
+                            
+                            // Get the interface traffic values
+                            const rxRate = data.debug.interface_traffic.rx || 0;
+                            const txRate = data.debug.interface_traffic.tx || 0;
+                            
+                            // Only override if we actually have traffic
+                            if (rxRate > 0 || txRate > 0) {
+                                data.chartRxData = [rxRate];
+                                data.chartTxData = [txRate];
+                                
+                                // Ensure we have at least one label
+                                if (!data.labels || data.labels.length === 0) {
+                                    data.labels = ['Active User'];
+                                } else if (data.labels.length > 1) {
+                                    // If multiple labels but we're using a single value, just keep the first label
+                                    data.labels = [data.labels[0]];
+                                }
+                                
+                                console.log('New chart data after override:');
+                                console.log('- Labels:', data.labels);
+                                console.log('- RX data:', data.chartRxData);
+                                console.log('- TX data:', data.chartTxData);
+                            }
+                        }
+                        
+                        // Update chart data and labels
+                realTimeBandwidthChart.updateOptions({
+                    xaxis: {
+                        categories: data.labels
+                            },
+                            tooltip: {
+                                y: {
+                                    formatter: function(val) {
+                                        console.log('Tooltip formatting value:', val);
+                                        return formatBandwidth(val);
+                                    }
+                                }
+                            },
+                            dataLabels: {
+                                enabled: true,
+                                formatter: function(val) {
+                                    console.log('Data label formatting value:', val);
+                                    return formatBandwidth(val);
+                                }
+                    }
+                });
+                
+                realTimeBandwidthChart.updateSeries([
+                    {
+                        name: 'Download (Rx)',
+                                data: data.chartRxData || data.rxData
+                    },
+                    {
+                        name: 'Upload (Tx)',
+                                data: data.chartTxData || data.txData
+                            }
+                        ]);
+                    } else {
+                        // If chart doesn't exist yet, create it
+                        console.log('Creating new chart with data');
+                        
+                        // Store data for chart creation
+                realTimeBandwidthData = {
+                            rxData: data.chartRxData || data.rxData,
+                            txData: data.chartTxData || data.txData,
+                    labels: data.labels
+                };
+                
+                        // Update chart options with new data
+                        realTimeBandwidthOptions.series[0].data = data.chartRxData || data.rxData;
+                        realTimeBandwidthOptions.series[1].data = data.chartTxData || data.txData;
+                realTimeBandwidthOptions.xaxis.categories = data.labels;
+                
+                        // Create and render the chart
+                window.realTimeBandwidthChart = new ApexCharts(document.querySelector("#real-time-bandwidth-chart"), realTimeBandwidthOptions);
+                window.realTimeBandwidthChart.render();
+                    }
+                } else if (!window.realTimeBandwidthChart) {
+                    // If no data and no chart exists, show a message
+                    chartElement.innerHTML = '<div class="alert alert-info text-center my-4">Aucun utilisateur actif trouvé</div>';
+                }
+            } else if (!window.realTimeBandwidthChart || !isAutoRefreshActive) {
+                // Only show "no active users" message if not in auto-refresh mode or if chart doesn't exist
+                chartElement.innerHTML = '<div class="alert alert-info text-center my-4">Aucun utilisateur actif trouvé</div>';
+            }
+            
             // Calculate total bandwidth for gauge charts
             if ((data.debug && data.debug.bandwidth_raw) && window.downloadGaugeChart && window.uploadGaugeChart) {
                 // Get total bandwidth in bps from the bandwidth_raw object (more reliable)
@@ -1240,6 +1605,13 @@ function refreshBandwidthData(showNotifications = true) {
                     document.title = `Statistiques [${timeString}]`;
                 }
             }
+            
+            // Store the original data for reference in formatters
+            window.latestBandwidthData = {
+                rxData: data.rxData,
+                txData: data.txData,
+                labels: data.labels
+            };
         } else {
             throw new Error(data.message || 'Une erreur inconnue est survenue');
         }
@@ -1258,6 +1630,22 @@ function refreshBandwidthData(showNotifications = true) {
             errorMessage = 'La requête a pris trop de temps et a été interrompue (plus de 20 secondes). Vérifiez la connexion à votre routeur MikroTik.';
         } else if (error.message) {
             errorMessage += ': ' + error.message;
+        }
+        
+        // Only show error in chart area if not in auto-refresh mode or if chart doesn't exist
+        if (chartElement && (!window.realTimeBandwidthChart || !isAutoRefreshActive)) {
+            chartElement.innerHTML = `
+                <div class="alert alert-danger text-center my-4">
+                    <p class="mb-2"><i class="uil uil-exclamation-triangle me-2"></i> ${errorMessage}</p>
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-danger me-2" onclick="checkRouterSettings()">
+                            <i class="uil uil-setting"></i> Vérifier les paramètres
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="refreshBandwidthData()">
+                            <i class="uil uil-redo"></i> Réessayer
+                        </button>
+                    </div>
+                </div>`;
         }
         
         // Only show error notifications if not in auto-refresh mode or showNotifications is true
