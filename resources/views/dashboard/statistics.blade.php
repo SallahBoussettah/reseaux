@@ -129,26 +129,37 @@
     .btn-pulse {
         animation: pulse 1.5s infinite;
     }
+    
+    /* Fix for layout issues */
+    .geex-content__wrapper {
+        width: 100%;
+        display: block;
+    }
+    
+    .geex-content__section-wrapper {
+        width: 100%;
+        margin-bottom: 1.5rem;
+    }
 </style>
 @endsection
 
 @section('content')
-            <div class="geex-content__header">
-                <div class="geex-content__header__content">
-                    <h2 class="geex-content__header__title">Statistique</h2>
+<div class="geex-content__header">
+    <div class="geex-content__header__content">
+        <h2 class="geex-content__header__title">Statistique</h2>
         <p class="geex-content__header__subtitle">Total Monthly Active Users: {{ $statistics->first()->monthly_active_users ?? 0 }}</p>
-                </div> 
-                
-                <div class="geex-content__header__action">
-                    <div class="geex-content__header__action__wrap">
-                        <ul class="geex-content__header__quickaction">
-                            <li class="geex-content__header__quickaction__item">
-                                <a href="#" class="geex-content__header__quickaction__link">
+    </div> 
+    
+    <div class="geex-content__header__action">
+        <div class="geex-content__header__action__wrap">
+            <ul class="geex-content__header__quickaction">
+                <li class="geex-content__header__quickaction__item">
+                    <a href="#" class="geex-content__header__quickaction__link">
                         <img class="user-img" src="{{ asset('assets/img/avatar/user.svg') }}" alt="user" />
-                                                </a>
-                                            </li>
-                                        </ul>
-                                    </div>
+                    </a>
+                </li>
+            </ul>
+        </div>
     </div> 
 </div>
 
@@ -178,8 +189,8 @@
                     <button id="auto-refresh-btn" class="btn btn-sm btn-outline-success">
                         <i class="uil uil-play"></i> Démarrer l'actualisation automatique
                     </button>
-                                    </div>
-                                </div>
+                </div>
+            </div>
             <div class="card-body" id="bandwidth-content">
                 <!-- Stats Cards Row -->
                 <div class="row mb-4">
@@ -188,18 +199,18 @@
                             <div class="card-body text-center">
                                 <h6 class="text-muted mb-2">Utilisateurs actifs</h6>
                                 <h2 class="mb-0 fw-bold">{{ count($activeConnections) }}</h2>
+                            </div>
+                        </div> 
                     </div>
-                </div> 
-            </div>
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
                         <div class="card border-0 bg-light h-100 metric-card">
                             <div class="card-body text-center">
                                 <h6 class="text-muted mb-2">Total Download</h6>
                                 <h2 class="mb-0 fw-bold text-primary">{{ $totalRxRateFormatted }}</h2>
                                 <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
-                                    </div>
-                                </div>
-                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
                         <div class="card border-0 bg-light h-100 metric-card">
                             <div class="card-body text-center">
@@ -227,40 +238,42 @@
                 </div>
                 
                 <!-- Total Bandwidth Usage from Database -->
-                <div class="col-12 mb-4">
-                    <div class="card shadow-sm">
-                        <div class="card-header bg-white py-3">
-                            <h5 class="mb-0">Total Cumulative Data Usage</h5>
-                        </div>
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card shadow-sm">
+                            <div class="card-header bg-white py-3">
+                                <h5 class="mb-0">Total Cumulative Data Usage</h5>
+                            </div>
                             <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-4 mb-3 mb-md-0">
-                                    <div class="card border-0 bg-light h-100 metric-card">
-                                        <div class="card-body text-center">
-                                            <h6 class="text-muted mb-2">Total Downloaded</h6>
-                                            <h2 class="mb-0 fw-bold text-primary">
-                                                {{ $formattedDatabaseTotals['uploaded'] }}
-                                            </h2>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3 mb-md-0">
+                                        <div class="card border-0 bg-light h-100 metric-card">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-2">Total Downloaded</h6>
+                                                <h2 class="mb-0 fw-bold text-primary">
+                                                    {{ $formattedDatabaseTotals['uploaded'] }}
+                                                </h2>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="col-md-4 mb-3 mb-md-0">
-                                    <div class="card border-0 bg-light h-100 metric-card">
-                                        <div class="card-body text-center">
-                                            <h6 class="text-muted mb-2">Total Uploaded</h6>
-                                            <h2 class="mb-0 fw-bold text-success">
-                                                {{ $formattedDatabaseTotals['downloaded'] }}
-                                            </h2>
+                                    <div class="col-md-4 mb-3 mb-md-0">
+                                        <div class="card border-0 bg-light h-100 metric-card">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-2">Total Uploaded</h6>
+                                                <h2 class="mb-0 fw-bold text-success">
+                                                    {{ $formattedDatabaseTotals['downloaded'] }}
+                                                </h2>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="card border-0 bg-light h-100 metric-card">
-                                        <div class="card-body text-center">
-                                            <h6 class="text-muted mb-2">Total Bandwidth Usage</h6>
-                                            <h2 class="mb-0 fw-bold text-dark">
-                                                {{ $formattedDatabaseTotals['total'] }}
-                                            </h2>
+                                    <div class="col-md-4">
+                                        <div class="card border-0 bg-light h-100 metric-card">
+                                            <div class="card-body text-center">
+                                                <h6 class="text-muted mb-2">Total Bandwidth Usage</h6>
+                                                <h2 class="mb-0 fw-bold text-dark">
+                                                    {{ $formattedDatabaseTotals['total'] }}
+                                                </h2>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -292,9 +305,9 @@
                             <div class="card-body">
                                 <h6 class="text-center mb-3">Utilisation du réseau - Download</h6>
                                 <div id="download-gauge-chart"></div>
-                                    </div>
-                                </div>
-                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="col-md-6">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body">
@@ -307,13 +320,15 @@
             </div>
         </div>
     </div>
-    
-    <!-- Active Users with Bandwidth Usage Table -->
+</div>
+
+<!-- Active Users with Bandwidth Usage Table -->
+<div class="geex-content__wrapper">
     <div class="geex-content__section-wrapper mb-4">
         <div class="card shadow-sm">
             <div class="card-header bg-white py-3">
                 <div class="d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Utilisateurs actifs avec utilisation de bande passante</h5>
+                    <h5 class="mb-0">Utilisateurs actifs avec utilisation de bande passante</h5>
                 </div>
             </div>
             <div class="card-body">
@@ -364,47 +379,51 @@
             </div>
         </div>
     </div>
-    
-    <!-- Historical Data Section -->
-    <div class="row mb-4">
-        <!-- Daily Active Users Chart -->
-        <div class="col-12 mb-4">
-            <div class="card shadow-sm">
-                <div class="card-header bg-white py-3">
-                    <h5 class="mb-0">Utilisateurs actifs quotidiens (30 derniers jours)</h5>
-                </div>
-                <div class="card-body">
-                    <div id="daily-active-users-chart"></div>
-                </div>
-            </div>
-        </div>
+</div>
 
-        <!-- Bandwidth Usage per User Chart -->
-        <div class="col-md-6 mb-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                    <h5 class="mb-0">Utilisation de la bande passante par utilisateur</h5>
-                    <a href="#" class="btn btn-sm btn-outline-primary">Voir plus</a>
-                </div>
-                <div class="card-body">
-                    <div id="bandwidth-usage-chart"></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- User Activity by Hour Chart -->
-        <div class="col-md-6 mb-4">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-white py-3">
-                    <h5 class="mb-0">Activité des utilisateurs par heure de la journée</h5>
-                </div>
-                <div class="card-body">
-                    <div id="user-activity-chart"></div>
-                            </div>
-                        </div>
+<!-- Historical Data Section -->
+<div class="geex-content__wrapper">
+    <div class="geex-content__section-wrapper mb-4">
+        <div class="row">
+            <!-- Daily Active Users Chart -->
+            <div class="col-12 mb-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white py-3">
+                        <h5 class="mb-0">Utilisateurs actifs quotidiens (30 derniers jours)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="daily-active-users-chart"></div>
                     </div>
                 </div>
             </div>
+
+            <!-- Bandwidth Usage per User Chart -->
+            <div class="col-md-6 mb-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                        <h5 class="mb-0">Utilisation de la bande passante par utilisateur</h5>
+                        <a href="#" class="btn btn-sm btn-outline-primary">Voir plus</a>
+                    </div>
+                    <div class="card-body">
+                        <div id="bandwidth-usage-chart"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- User Activity by Hour Chart -->
+            <div class="col-md-6 mb-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-white py-3">
+                        <h5 class="mb-0">Activité des utilisateurs par heure de la journée</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="user-activity-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
