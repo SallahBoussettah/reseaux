@@ -243,7 +243,7 @@
 
     <div class="existing-code">
         <h5>{{ __('Already have a verification code?') }}</h5>
-        <a href="{{ route('token.verification') }}" class="code-btn">
+        <a href="{{ route('token.registration') }}" class="code-btn">
             {{ __('Enter Your Code') }}
         </a>
     </div>

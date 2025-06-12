@@ -17,6 +17,10 @@ Route::get('/token/verify', [ClientController::class, 'showTokenVerification'])-
 Route::post('/token/verify', [ClientController::class, 'verifyToken'])->name('verify.token');
 Route::get('/token/check', [ClientController::class, 'checkToken'])->name('check.token');
 
+// Token registration routes (new)
+Route::get('/token/register', [ClientController::class, 'showTokenRegistration'])->name('token.registration');
+Route::post('/token/register', [ClientController::class, 'processTokenRegistration'])->name('process.token.registration');
+
 Route::get('/finale', [ClientController::class, 'finale'])->name('verification.page');
 
 // MikroTik API routes

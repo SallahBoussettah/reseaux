@@ -135,7 +135,13 @@
 
 @section('content')
 <div class="verification-container">
-    <h2 class="verification-title">{{ __('Verify Your Email') }}</h2>
+    <h2 class="verification-title">
+        @if(isset($token_registration))
+            {{ __('Enter Your WiFi Access Code') }}
+        @else
+            {{ __('Verify Your Email') }}
+        @endif
+    </h2>
     
     @if (session('error'))
         <div class="alert alert-danger">
@@ -149,7 +155,17 @@
         </div>
     @endif
 
-    <p class="verification-subtitle">{{ __('Please enter the 6-digit verification code sent to your email. This code is valid for 15 minutes.') }}</p>
+    <p class="verification-subtitle">
+        @if(isset($token_registration))
+            @if(isset($full_name))
+                {{ __('Hi') }} {{ $full_name }}! {{ __('Please enter the 6-digit access code you received to get WiFi access.') }}
+            @else
+                {{ __('Please enter the 6-digit access code you received to get WiFi access.') }}
+            @endif
+        @else
+            {{ __('Please enter the 6-digit verification code sent to your email. This code is valid for 15 minutes.') }}
+        @endif
+    </p>
 
     @if(isset($attempts_remaining))
     <div class="attempts-info" style="text-align: center; margin-bottom: 1rem; color: #666;">
@@ -183,7 +199,11 @@
         </button>
         
         <a href="{{ url('/wifi') }}" class="btn-link">
-            {{ __('Need a new code?') }}
+            @if(isset($token_registration))
+                {{ __('Need to register with email instead?') }}
+            @else
+                {{ __('Need a new code?') }}
+            @endif
         </a>
     </form>
 
