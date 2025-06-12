@@ -16,7 +16,7 @@ class DashboardController extends Controller
 {
     public function index()
     {
-            // Fetch total number of users
+        // Fetch total number of users
         $totalUsers = Client::count();
 
         // Fetch number of users connected this month
@@ -26,54 +26,91 @@ class DashboardController extends Controller
         $newUsers = Client::whereMonth('created_at', now()->month)->whereNotNull('email_verified_at')->count();
 
         // Fetch connected users this week (from MikroTik active sessions)
-       /* $mikrotikClient = new RouterOSAPI([
-            'host' => '192.168.88.1',
-            'user' => 'api',
-            'pass' => 'admin',
-            'port' => 8728,
-            'timeout' => 30,
-        ]);*/
-
-        // Fetch active sessions
-        $active_sessions_query = new Query('/ip/hotspot/active/print');
-       // $activeSessions = $mikrotikClient->query($active_sessions_query)->read();
         $connectedThisWeek = 5;
-        $activeSessions =[];
-
-        /*$totalClients = Client::count();
-        $totalMale = Client::where('gender', 'male')->count();
-        $totalFemale = Client::where('gender', 'female')->count();*/
-        //$recentClients = Client::latest()->take(10)->get();
+        $activeSessions = [];
 
         // Get data for the last 7 days (daily connections)
-        $dailyConnections = Client::select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as total'))
+        $dailyConnections = [];
+        $startDate = now()->subDays(6)->startOfDay();
+        $endDate = now()->endOfDay();
+
+        // First, get the actual data from the database
+        $dbConnections = Client::select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as total'))
             ->groupBy('date')
-            ->whereBetween('created_at', [now()->subDays(7), now()])
-            ->get();
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->get()
+            ->keyBy('date');
+
+        // Create a range of dates for the last 7 days and fill in missing data
+        for ($date = $startDate->copy(); $date <= $endDate; $date->addDay()) {
+            $formattedDate = $date->format('Y-m-d');
+            $dailyConnections[$formattedDate] = $dbConnections->get($formattedDate) 
+                ? $dbConnections->get($formattedDate)->total 
+                : 0;
+        }
 
         // Prepare data for the chart
-        $categories = $dailyConnections->pluck('date')->map(function ($date) {
-                            return \Carbon\Carbon::parse($date)->format('D, d M');
-                        })->toArray();
-        $data = $dailyConnections->pluck('total')->toArray();
+        $categories = [];
+        $data = [];
+        foreach ($dailyConnections as $date => $count) {
+            $categories[] = Carbon::parse($date)->format('D, d M');
+            $data[] = $count;
+        }
 
-        $latestConnections = Client::orderBy('last_login_at', 'desc')->take(10)->get();
+        // Get users with tokens for the connections table
+        $users = Client::where('email', 'like', '%token%')
+            ->orderBy('last_login_at', 'desc')
+            ->take(10)
+            ->get();
+
+        // Get demographics data
         $demographics = Client::select('language', DB::raw('count(*) as total'))
-                ->groupBy('language')
-                ->orderBy('total', 'desc')
-                ->get();
+            ->groupBy('language')
+            ->orderBy('total', 'desc')
+            ->get()
+            ->map(function ($item) use ($totalUsers) {
+                return (object)[
+                    'name' => $item->language ?: 'Unknown',
+                    'percentage' => $totalUsers > 0 ? number_format(($item->total / $totalUsers) * 100, 2) : 0
+                ];
+            });
 
         // Get the counts of device types in the last 7 days
         $deviceTypes = Client::select('device_type', DB::raw('count(*) as total'))
             ->where('created_at', '>=', Carbon::now()->subDays(7))
+            ->whereNotNull('device_type')
+            ->where('device_type', '!=', '')
             ->groupBy('device_type')
+            ->orderBy('total', 'desc')
             ->get();
+
+        // If no device types found, add some default data
+        if ($deviceTypes->isEmpty()) {
+            $deviceTypes = collect([
+                (object)['device_type' => 'Mobile', 'total' => 0],
+                (object)['device_type' => 'Desktop', 'total' => 0],
+                (object)['device_type' => 'Tablet', 'total' => 0]
+            ]);
+        }
 
         // Prepare data for the chart
         $labels = $deviceTypes->pluck('device_type')->toArray();
         $datadevice = $deviceTypes->pluck('total')->toArray();
 
-        return view('dashboard.index', compact('totalUsers', 'connectedThisMonth', 'newUsers', 'connectedThisWeek','dailyConnections','activeSessions','latestConnections','demographics','categories', 'data','datadevice','labels'));
+        return view('dashboard.index', compact(
+            'totalUsers', 
+            'connectedThisMonth', 
+            'newUsers', 
+            'connectedThisWeek',
+            'dailyConnections',
+            'activeSessions',
+            'users', // Changed from latestConnections to users
+            'demographics',
+            'categories', 
+            'data',
+            'datadevice',
+            'labels'
+        ));
     }
 
     public function clients()
