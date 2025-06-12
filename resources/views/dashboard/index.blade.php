@@ -131,8 +131,10 @@
                                 </tr>
                             </thead>
                             <tbody>
+                                @php $connectionCount = 0; @endphp
                                 @foreach($users as $user)
-                                    @if(strpos($user->email, 'token') !== false)
+                                    @if(strpos($user->email, 'token') !== false && $connectionCount < 5)
+                                        @php $connectionCount++; @endphp
                                         <tr>
                                             <td class="user-info">
                                                 <i class="uil uil-user"></i>
@@ -482,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Calculate total devices
         var totalDevices = 0;
         for (var i = 0; i < deviceData.length; i++) {
-            totalDevices += deviceData[i];
+            totalDevices += parseInt(deviceData[i]);
         }
         
         // Create chart element
@@ -495,13 +497,10 @@ document.addEventListener('DOMContentLoaded', function() {
             series: deviceData,
             labels: labels,
             chart: {
-                type: 'donut',
+                type: 'pie',
                 height: 240,
                 fontFamily: 'inherit',
                 animations: {
-                    enabled: false
-                },
-                sparkline: {
                     enabled: false
                 },
                 background: 'transparent'
@@ -527,41 +526,29 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             plotOptions: {
                 pie: {
-                    donut: {
-                        size: '70%',
-                        labels: {
-                            show: true,
-                            name: {
-                                show: true,
-                                fontSize: '14px',
-                                fontWeight: 600,
-                                color: 'var(--gray-700)'
-                            },
-                            value: {
-                                show: true,
-                                fontSize: '16px',
-                                fontWeight: 700,
-                                color: 'var(--gray-800)',
-                                formatter: function(val) {
-                                    return val;
-                                }
-                            },
-                            total: {
-                                show: true,
-                                label: 'Total',
-                                fontSize: '14px',
-                                fontWeight: 600,
-                                color: 'var(--gray-700)',
-                                formatter: function() {
-                                    return totalDevices;
-                                }
-                            }
-                        }
+                    expandOnClick: false,
+                    dataLabels: {
+                        offset: 0,
+                        minAngleToShowLabel: 0
                     }
                 }
             },
             dataLabels: {
-                enabled: false
+                enabled: true,
+                formatter: function(val, opts) {
+                    return opts.w.config.series[opts.seriesIndex];
+                },
+                style: {
+                    fontSize: '14px',
+                    fontFamily: 'inherit',
+                    fontWeight: 600
+                },
+                background: {
+                    enabled: false
+                },
+                dropShadow: {
+                    enabled: false
+                }
             },
             tooltip: {
                 enabled: true,
@@ -594,6 +581,18 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             var chart = new ApexCharts(document.getElementById('deviceTypesChartGraph'), options);
             chart.render();
+            
+            // Add total in the center
+            setTimeout(function() {
+                var centerText = document.createElement('div');
+                centerText.className = 'device-total-center';
+                centerText.innerHTML = `
+                    <div class="total-value">${totalDevices}</div>
+                    <div class="total-label">Total</div>
+                `;
+                document.querySelector('#deviceTypesChartGraph .apexcharts-canvas').appendChild(centerText);
+            }, 100);
+            
         } catch (error) {
             console.error('Error rendering device types chart:', error);
             // Fallback to list view
@@ -609,6 +608,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             deviceTypesContainer.innerHTML = `
                 <div class="chart-placeholder">
+                    <div class="chart-value">${totalDevices}</div>
+                    <div class="chart-label">Total des appareils</div>
                     <div class="device-type-list">
                         ${deviceItemsHtml}
                     </div>
@@ -811,15 +812,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .device-type-list {
     width: 100%;
-    margin-top: 0;
+    margin-top: 1rem;
     text-align: left;
 }
 
 .device-type-item {
     display: flex;
     justify-content: space-between;
-    padding: 0.5rem 0;
+    padding: 0.75rem 0.5rem;
     border-bottom: 1px solid var(--gray-200);
+    align-items: center;
 }
 
 .device-type-item:last-child {
@@ -830,11 +832,53 @@ document.addEventListener('DOMContentLoaded', function() {
     font-size: 0.9rem;
     font-weight: 500;
     color: var(--gray-700);
+    display: flex;
+    align-items: center;
+}
+
+.device-type-name::before {
+    content: "";
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.device-type-item:nth-child(1) .device-type-name::before {
+    background-color: var(--purple);
+}
+
+.device-type-item:nth-child(2) .device-type-name::before {
+    background-color: var(--pink);
 }
 
 .device-type-value {
     font-weight: 600;
-    color: var(--purple);
+    color: var(--gray-800);
+    font-family: monospace;
+}
+
+.device-total-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+}
+
+.device-total-center .total-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--gray-800);
+    line-height: 1;
+}
+
+.device-total-center .total-label {
+    font-size: 0.875rem;
+    color: var(--gray-500);
+    margin-top: 0.25rem;
 }
 
 /* Tables Section */
