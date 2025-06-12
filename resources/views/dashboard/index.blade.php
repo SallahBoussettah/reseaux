@@ -142,18 +142,22 @@
                                                 {{ $user->mac_address ?? 'N/A' }}
                                             </td>
                                             <td class="email">
-                                                {{ $user->email }}
+                                                @if(strpos($user->email, 'token_user') === 0)
+                                                    <span class="token-user">Token User</span>
+                                                @else
+                                                    {{ $user->email }}
+                                                @endif
                                             </td>
                                             <td class="text-right">
                                                 <span class="download-value">
                                                     <i class="uil uil-download-alt"></i>
-                                                    {{ isset($user->total_downloaded_bytes) ? number_format($user->total_downloaded_bytes / 1048576, 2) . ' MB' : '0 MB' }}
+                                                    {{ isset($user->total_uploaded_bytes) ? number_format($user->total_uploaded_bytes / 1048576, 2) . ' MB' : '0 MB' }}
                                                 </span>
                                             </td>
                                             <td class="text-right">
                                                 <span class="upload-value">
                                                     <i class="uil uil-upload-alt"></i>
-                                                    {{ isset($user->total_uploaded_bytes) ? number_format($user->total_uploaded_bytes / 1048576, 2) . ' MB' : '0 MB' }}
+                                                    {{ isset($user->total_downloaded_bytes) ? number_format($user->total_downloaded_bytes / 1048576, 2) . ' MB' : '0 MB' }}
                                                 </span>
                                             </td>
                                         </tr>
@@ -296,32 +300,25 @@ document.addEventListener('DOMContentLoaded', function() {
         var connectionCounts = @json(array_values($data));
         var totalConnections = {{ array_sum($data) }};
         
-        // Format dates to be more readable (e.g., "Lun 12", "Mar 13", etc.)
+        // Generate last 7 days if dates are not available or invalid
+        var today = new Date();
+        var last7Days = [];
         var formattedDates = [];
-        for (var i = 0; i < dates.length; i++) {
-            try {
-                // Try to parse the date string correctly
-                var dateParts = dates[i].split('-');
-                if (dateParts.length === 3) {
-                    var year = parseInt(dateParts[0]);
-                    var month = parseInt(dateParts[1]) - 1; // JavaScript months are 0-indexed
-                    var day = parseInt(dateParts[2]);
-                    
-                    var date = new Date(year, month, day);
-                    if (!isNaN(date.getTime())) {
-                        var days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-                        var day = days[date.getDay()];
-                        var dateNum = date.getDate();
-                        formattedDates.push(day + ' ' + dateNum);
-                        continue;
-                    }
-                }
-                // If parsing failed, just use the original date string
-                formattedDates.push(dates[i]);
-            } catch (e) {
-                console.error('Error parsing date:', e);
-                formattedDates.push(dates[i]);
-            }
+        
+        // Create array of the last 7 days
+        for (var i = 6; i >= 0; i--) {
+            var date = new Date(today);
+            date.setDate(today.getDate() - i);
+            last7Days.push(date);
+        }
+        
+        // Format dates to be more readable (e.g., "Lun 5", "Mar 6", etc.)
+        for (var i = 0; i < last7Days.length; i++) {
+            var date = last7Days[i];
+            var days = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+            var dayName = days[date.getDay()];
+            var dateNum = date.getDate();
+            formattedDates.push(dayName + ' ' + dateNum);
         }
         
         // Create chart info element
@@ -378,8 +375,6 @@ document.addEventListener('DOMContentLoaded', function() {
             xaxis: {
                 type: 'category',
                 categories: formattedDates,
-                tickAmount: formattedDates.length,
-                tickPlacement: 'on',
                 labels: {
                     show: true,
                     style: {
@@ -388,10 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         fontWeight: 500,
                         colors: 'var(--gray-600)'
                     },
-                    rotate: 0,
-                    formatter: function(value) {
-                        return value;
-                    }
+                    rotate: 0
                 },
                 axisBorder: {
                     show: false
@@ -407,6 +399,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         width: 1,
                         dashArray: 3
                     }
+                },
+                tooltip: {
+                    enabled: false
                 }
             },
             yaxis: {
@@ -452,7 +447,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Initialize chart
         try {
-            var chart = new ApexCharts(chartElement, options);
+            var chart = new ApexCharts(document.getElementById('dailyConnectionsChartGraph'), options);
             chart.render();
         } catch (error) {
             console.error('Error rendering daily connections chart:', error);
@@ -597,7 +592,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Initialize chart
         try {
-            var chart = new ApexCharts(chartElement, options);
+            var chart = new ApexCharts(document.getElementById('deviceTypesChartGraph'), options);
             chart.render();
         } catch (error) {
             console.error('Error rendering device types chart:', error);
@@ -1171,6 +1166,15 @@ document.addEventListener('DOMContentLoaded', function() {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.token-user {
+    color: var(--gray-500);
+    font-style: italic;
+    background-color: var(--gray-100);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
 }
 </style>
 @endsection
