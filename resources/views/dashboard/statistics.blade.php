@@ -5,24 +5,54 @@
 
 @section('styles')
 <style>
-    /* Enhanced styles for statistics page */
+    /* Enhanced styles for statistics page - Updated to match dashboard color scheme */
+    :root {
+        --purple: #6366F1;
+        --purple-light: #8B5CF6;
+        --pink: #F43F5E;
+        --pink-light: #FB7185;
+        --green: #10B981;
+        --green-light: #34D399;
+        --blue: #3B82F6;
+        --blue-light: #60A5FA;
+        --teal: #14B8A6;
+        --teal-dark: #0D9488;
+        --orange: #F59E0B;
+        --orange-dark: #D97706;
+        --gray-50: #F9FAFB;
+        --gray-100: #F3F4F6;
+        --gray-200: #E5E7EB;
+        --gray-300: #D1D5DB;
+        --gray-400: #9CA3AF;
+        --gray-500: #6B7280;
+        --gray-600: #4B5563;
+        --gray-700: #374151;
+        --gray-800: #1F2937;
+        --gray-900: #111827;
+        --radius: 12px;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    
     .card {
         border: none;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
         transition: all 0.3s ease;
         margin-bottom: 1.5rem;
         overflow: hidden;
+        background-color: white;
     }
     
     .card.shadow-sm:hover {
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08) !important;
+        box-shadow: var(--shadow-md) !important;
         transform: translateY(-4px);
     }
     
     .card-header {
-        background-color: #fff;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        background-color: white;
+        border-bottom: 1px solid rgba(var(--blue-light), 0.1);
         padding: 1.25rem 1.5rem;
         display: flex;
         align-items: center;
@@ -33,15 +63,16 @@
         font-weight: 600;
         font-size: 1.1rem;
         margin: 0;
-        color: #2D3748;
+        color: var(--blue);
     }
     
     .card-body {
         padding: 1.5rem;
+        background-color: transparent;
     }
     
     .bg-light {
-        background-color: #F8FAFC !important;
+        background-color: white !important;
     }
     
     .table {
@@ -52,22 +83,22 @@
         font-weight: 600;
         font-size: 0.875rem;
         border-top: none;
-        color: #4A5568;
+        color: var(--blue);
         text-transform: uppercase;
         letter-spacing: 0.05em;
         padding: 1rem;
-        border-bottom: 1px solid #E2E8F0;
+        border-bottom: 1px solid rgba(var(--blue-light), 0.1);
     }
     
     .table td {
         padding: 1rem;
         vertical-align: middle;
-        border-bottom: 1px solid #E2E8F0;
-        color: #4A5568;
+        border-bottom: 1px solid rgba(var(--blue-light), 0.1);
+        color: var(--gray-700);
     }
     
     .table tr:hover {
-        background-color: #F8FAFC;
+        background-color: rgba(var(--blue-light), 0.05);
     }
     
     .badge {
@@ -77,21 +108,21 @@
     }
     
     .badge.bg-primary {
-        background-color: rgba(67, 97, 238, 0.15) !important;
-        color: #4361ee;
+        background-color: rgba(59, 130, 246, 0.15) !important;
+        color: var(--blue);
     }
     
     .badge.bg-success {
-        background-color: rgba(43, 205, 114, 0.15) !important;
-        color: #2bcd72;
+        background-color: rgba(16, 185, 129, 0.15) !important;
+        color: var(--green);
     }
     
     .text-primary {
-        color: #4361ee !important;
+        color: var(--blue) !important;
     }
     
     .text-success {
-        color: #2bcd72 !important;
+        color: var(--green) !important;
     }
     
     .btn {
@@ -107,58 +138,59 @@
     }
     
     .btn-outline-primary {
-        color: #4361ee;
-        border-color: #4361ee;
+        color: var(--blue);
+        border-color: var(--blue);
     }
     
     .btn-outline-primary:hover {
-        background-color: #4361ee;
-        border-color: #4361ee;
+        background-color: var(--blue);
+        border-color: var(--blue);
         color: white;
     }
     
     .btn-outline-success {
-        color: #2bcd72;
-        border-color: #2bcd72;
+        color: var(--green);
+        border-color: var(--green);
     }
     
     .btn-outline-success:hover {
-        background-color: #2bcd72;
-        border-color: #2bcd72;
+        background-color: var(--green);
+        border-color: var(--green);
         color: white;
     }
     
     .btn-outline-secondary {
-        color: #718096;
-        border-color: #CBD5E0;
+        color: var(--purple);
+        border-color: var(--purple-light);
     }
     
     .btn-outline-secondary:hover {
-        background-color: #718096;
-        border-color: #718096;
+        background-color: var(--purple);
+        border-color: var(--purple);
         color: white;
     }
     
     .btn-danger {
-        background-color: #e7515a;
-        border-color: #e7515a;
+        background-color: var(--pink);
+        border-color: var(--pink);
     }
     
     .btn-danger:hover {
-        background-color: #d62c35;
-        border-color: #d62c35;
+        background-color: var(--pink-light);
+        border-color: var(--pink-light);
     }
     
     /* Dashboard metrics cards */
     .metric-card {
-        border-radius: 12px;
+        border-radius: var(--radius);
         transition: all 0.3s ease;
         height: 100%;
+        background: linear-gradient(to bottom right, rgba(var(--blue-light), 0.05), white);
     }
     
     .metric-card:hover {
         transform: translateY(-4px);
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08) !important;
+        box-shadow: var(--shadow-md) !important;
     }
     
     .metric-card h2 {
@@ -171,7 +203,7 @@
         font-size: 0.875rem;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: #718096;
+        color: var(--blue);
         margin-bottom: 0.75rem;
     }
     
@@ -205,13 +237,13 @@
     /* Additional styles for button pulse effect */
     @keyframes pulse {
         0% {
-            box-shadow: 0 0 0 0 rgba(67, 97, 238, 0.7);
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
         }
         70% {
-            box-shadow: 0 0 0 10px rgba(67, 97, 238, 0);
+            box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
         }
         100% {
-            box-shadow: 0 0 0 0 rgba(67, 97, 238, 0);
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
         }
     }
 
@@ -239,27 +271,27 @@
     .geex-content__header__title {
         font-size: 1.75rem;
         font-weight: 700;
-        color: #2D3748;
+        color: var(--blue);
         margin-bottom: 0.5rem;
     }
     
     .geex-content__header__subtitle {
         font-size: 1rem;
-        color: #718096;
+        color: var(--blue-light);
     }
     
     /* Toast notifications styling */
     .toast {
         background-color: white;
         border: none;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: var(--shadow);
         border-radius: 8px;
         overflow: hidden;
     }
     
     .toast-header {
-        background-color: #F8FAFC;
-        border-bottom: 1px solid #EDF2F7;
+        background-color: white;
+        border-bottom: 1px solid rgba(var(--blue-light), 0.1);
         padding: 0.75rem 1rem;
     }
     
@@ -270,23 +302,26 @@
     /* Dropdown styling */
     .dropdown-menu {
         border: none;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: var(--shadow);
         border-radius: 8px;
         padding: 0.5rem 0;
+        background-color: white;
     }
     
     .dropdown-item {
         padding: 0.5rem 1rem;
         font-size: 0.875rem;
+        color: var(--blue);
     }
     
     .dropdown-item:hover {
-        background-color: #F8FAFC;
+        background-color: rgba(var(--blue-light), 0.1);
+        color: var(--blue);
     }
     
     .dropdown-item.active {
-        background-color: rgba(67, 97, 238, 0.1);
-        color: #4361ee;
+        background-color: rgba(59, 130, 246, 0.1);
+        color: var(--blue);
     }
 </style>
 @endsection
@@ -829,13 +864,13 @@ function initializePrimaryCharts() {
                         fontSize: '14px',
                         fontWeight: 600,
                         offsetY: -10,
-                        color: '#4361ee'
+                        color: '#3B82F6'
                     },
                     value: {
                         show: true,
                         fontSize: '22px',
                         fontWeight: 'bold',
-                        color: '#4361ee',
+                        color: '#3B82F6',
                         formatter: function(val) { return Math.round(val) + '%'; }
                     }
                 }
@@ -847,7 +882,7 @@ function initializePrimaryCharts() {
                 shade: 'light',
                 type: 'horizontal',
                 shadeIntensity: 0.5,
-                gradientToColors: ['#4361ee'],
+                gradientToColors: ['#60A5FA'],
                 inverseColors: true,
                 opacityFrom: 1,
                 opacityTo: 1,
@@ -882,13 +917,13 @@ function initializePrimaryCharts() {
                         fontSize: '14px',
                         fontWeight: 600,
                         offsetY: -10,
-                        color: '#2bcd72'
+                        color: '#10B981'
                     },
                     value: {
                         show: true,
                         fontSize: '22px',
                         fontWeight: 'bold',
-                        color: '#2bcd72',
+                        color: '#10B981',
                         formatter: function(val) { return Math.round(val) + '%'; }
                     }
                 }
@@ -900,7 +935,7 @@ function initializePrimaryCharts() {
                 shade: 'light',
                 type: 'horizontal',
                 shadeIntensity: 0.5,
-                gradientToColors: ['#2bcd72'],
+                gradientToColors: ['#34D399'],
                 inverseColors: true,
                 opacityFrom: 1,
                 opacityTo: 1,
@@ -1000,14 +1035,26 @@ function initializeSecondaryCharts() {
             curve: 'smooth',
             width: 3
         },
-        colors: ['#4361ee'],
+        colors: ['#3B82F6'],
         fill: {
             type: 'gradient',
             gradient: {
                 shadeIntensity: 1,
                 opacityFrom: 0.7,
                 opacityTo: 0.2,
-                stops: [0, 90, 100]
+                stops: [0, 90, 100],
+                colorStops: [
+                    {
+                        offset: 0,
+                        color: '#3B82F6',
+                        opacity: 0.8
+                    },
+                    {
+                        offset: 100,
+                        color: '#60A5FA',
+                        opacity: 0.2
+                    }
+                ]
             }
         },
         xaxis: {
@@ -1017,7 +1064,7 @@ function initializeSecondaryCharts() {
                 style: {
                     fontSize: '12px',
                     fontWeight: 500,
-                    colors: '#718096'
+                    colors: '#3B82F6'
                 }
             },
             axisBorder: {
@@ -1032,7 +1079,8 @@ function initializeSecondaryCharts() {
                 text: 'Nombre d\'utilisateurs',
                 style: {
                     fontSize: '13px',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    color: '#3B82F6'
                 }
             },
             min: 0,
@@ -1041,7 +1089,7 @@ function initializeSecondaryCharts() {
                 style: {
                     fontSize: '12px',
                     fontWeight: 500,
-                    colors: ['#718096']
+                    colors: ['#3B82F6']
                 },
                 formatter: function(val) {
                     return Math.round(val);
@@ -1050,7 +1098,7 @@ function initializeSecondaryCharts() {
         },
         markers: {
             size: 4,
-            colors: ['#4361ee'],
+            colors: ['#3B82F6'],
             strokeColors: '#fff',
             strokeWidth: 2,
             hover: {
@@ -1075,7 +1123,7 @@ function initializeSecondaryCharts() {
             }
         },
         grid: {
-            borderColor: '#e2e8f0',
+            borderColor: 'rgba(96, 165, 250, 0.2)',
             strokeDashArray: 4,
             padding: {
                 top: 0,
@@ -1112,7 +1160,7 @@ function initializeSecondaryCharts() {
                 distributed: false
             }
         },
-        colors: ['#4361ee', '#2bcd72'],
+        colors: ['#3B82F6', '#10B981'],
         dataLabels: {
             enabled: true,
             formatter: function (val, opt) {
@@ -1122,12 +1170,15 @@ function initializeSecondaryCharts() {
                 }
                 return val;
             },
-            style: { fontSize: '12px' }
+            style: { fontSize: '12px', colors: ['#fff'] }
         },
         xaxis: {
             categories: bandwidthUsage.map(user => user.full_name),
             labels: {
-                style: { fontSize: '12px' }
+                style: { 
+                    fontSize: '12px',
+                    colors: '#3B82F6'
+                }
             }
         },
         tooltip: {
@@ -1144,7 +1195,10 @@ function initializeSecondaryCharts() {
         },
         legend: {
             position: 'top',
-            horizontalAlign: 'right'
+            horizontalAlign: 'right',
+            labels: {
+                colors: '#3B82F6'
+            }
         }
     };
         
@@ -1211,14 +1265,14 @@ function initializeSecondaryCharts() {
                 }
             }
         },
-        colors: ['#4361ee'],
+        colors: ['#6366F1'],
         fill: {
             type: 'gradient',
             gradient: {
                 shade: 'light',
                 type: 'vertical',
                 shadeIntensity: 0.1,
-                gradientToColors: ['#2bc0e4'],
+                gradientToColors: ['#8B5CF6'],
                 inverseColors: false,
                 opacityFrom: 1,
                 opacityTo: 0.9,
@@ -1229,7 +1283,7 @@ function initializeSecondaryCharts() {
             style: { 
                 fontSize: '12px',
                 fontWeight: 500,
-                colors: ['#444']
+                colors: ['#fff']
             },
             offsetY: -20,
             formatter: function(val) {
@@ -1243,14 +1297,15 @@ function initializeSecondaryCharts() {
                 text: 'Heure de la journée',
                 style: {
                     fontSize: '13px',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    color: '#6366F1'
                 }
             },
             labels: {
                 style: { 
                     fontSize: '12px',
                     fontWeight: 500,
-                    colors: '#718096'
+                    colors: '#6366F1'
                 }
             },
             axisBorder: {
@@ -1265,7 +1320,8 @@ function initializeSecondaryCharts() {
                 text: 'Nombre d\'utilisateurs',
                 style: {
                     fontSize: '13px',
-                    fontWeight: 500
+                    fontWeight: 500,
+                    color: '#6366F1'
                 }
             },
             min: 0,
@@ -1274,7 +1330,7 @@ function initializeSecondaryCharts() {
                 style: {
                     fontSize: '12px',
                     fontWeight: 500,
-                    colors: ['#718096']
+                    colors: ['#6366F1']
                 },
                 formatter: function(val) {
                     return Math.round(val);
@@ -1296,7 +1352,7 @@ function initializeSecondaryCharts() {
             }
         },
         grid: {
-            borderColor: '#e2e8f0',
+            borderColor: 'rgba(99, 102, 241, 0.2)',
             strokeDashArray: 4,
             padding: {
                 top: 20,
