@@ -5,37 +5,75 @@
 
 @section('styles')
 <style>
-    /* Custom styles for statistics page */
+    /* Enhanced styles for statistics page */
     .card {
         border: none;
-        border-radius: 10px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         transition: all 0.3s ease;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
     }
     
     .card.shadow-sm:hover {
-        box-shadow: 0 .5rem 1rem rgba(0,0,0,.08) !important;
-        transform: translateY(-3px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08) !important;
+        transform: translateY(-4px);
     }
     
     .card-header {
-        border-bottom: 1px solid rgba(0,0,0,.05);
-        border-top-left-radius: 10px;
-        border-top-right-radius: 10px;
+        background-color: #fff;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .card-header h5 {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin: 0;
+        color: #2D3748;
+    }
+    
+    .card-body {
+        padding: 1.5rem;
     }
     
     .bg-light {
-        background-color: rgba(245, 247, 251, 0.7) !important;
+        background-color: #F8FAFC !important;
+    }
+    
+    .table {
+        margin-bottom: 0;
     }
     
     .table th {
         font-weight: 600;
         font-size: 0.875rem;
         border-top: none;
+        color: #4A5568;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 1rem;
+        border-bottom: 1px solid #E2E8F0;
+    }
+    
+    .table td {
+        padding: 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #E2E8F0;
+        color: #4A5568;
+    }
+    
+    .table tr:hover {
+        background-color: #F8FAFC;
     }
     
     .badge {
         padding: 0.5em 0.85em;
         font-weight: 500;
+        border-radius: 6px;
     }
     
     .badge.bg-primary {
@@ -56,6 +94,18 @@
         color: #2bcd72 !important;
     }
     
+    .btn {
+        border-radius: 8px;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        transition: all 0.2s;
+    }
+    
+    .btn-sm {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.875rem;
+    }
+    
     .btn-outline-primary {
         color: #4361ee;
         border-color: #4361ee;
@@ -64,6 +114,7 @@
     .btn-outline-primary:hover {
         background-color: #4361ee;
         border-color: #4361ee;
+        color: white;
     }
     
     .btn-outline-success {
@@ -74,6 +125,18 @@
     .btn-outline-success:hover {
         background-color: #2bcd72;
         border-color: #2bcd72;
+        color: white;
+    }
+    
+    .btn-outline-secondary {
+        color: #718096;
+        border-color: #CBD5E0;
+    }
+    
+    .btn-outline-secondary:hover {
+        background-color: #718096;
+        border-color: #718096;
+        color: white;
     }
     
     .btn-danger {
@@ -87,15 +150,37 @@
     }
     
     /* Dashboard metrics cards */
+    .metric-card {
+        border-radius: 12px;
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08) !important;
+    }
+    
     .metric-card h2 {
         font-size: 1.75rem;
         margin-bottom: 0;
+        font-weight: 700;
     }
     
     .metric-card h6 {
-        font-size: 0.8125rem;
+        font-size: 0.875rem;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        color: #718096;
+        margin-bottom: 0.75rem;
+    }
+    
+    .metric-card .card-body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
     }
     
     /* Responsive adjustments */
@@ -109,7 +194,11 @@
         }
         
         .card-header {
-            padding: 0.75rem 1rem;
+            padding: 1rem;
+        }
+        
+        .card-body {
+            padding: 1.25rem;
         }
     }
 
@@ -134,11 +223,70 @@
     .geex-content__wrapper {
         width: 100%;
         display: block;
+        margin-bottom: 2rem;
     }
     
     .geex-content__section-wrapper {
         width: 100%;
         margin-bottom: 1.5rem;
+    }
+    
+    /* Enhanced header styling */
+    .geex-content__header {
+        margin-bottom: 2rem;
+    }
+    
+    .geex-content__header__title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #2D3748;
+        margin-bottom: 0.5rem;
+    }
+    
+    .geex-content__header__subtitle {
+        font-size: 1rem;
+        color: #718096;
+    }
+    
+    /* Toast notifications styling */
+    .toast {
+        background-color: white;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .toast-header {
+        background-color: #F8FAFC;
+        border-bottom: 1px solid #EDF2F7;
+        padding: 0.75rem 1rem;
+    }
+    
+    .toast-body {
+        padding: 1rem;
+    }
+    
+    /* Dropdown styling */
+    .dropdown-menu {
+        border: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        padding: 0.5rem 0;
+    }
+    
+    .dropdown-item {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+    }
+    
+    .dropdown-item:hover {
+        background-color: #F8FAFC;
+    }
+    
+    .dropdown-item.active {
+        background-color: rgba(67, 97, 238, 0.1);
+        color: #4361ee;
     }
 </style>
 @endsection
@@ -147,7 +295,13 @@
 <div class="geex-content__header">
     <div class="geex-content__header__content">
         <h2 class="geex-content__header__title">Statistique</h2>
-        <p class="geex-content__header__subtitle">Total Monthly Active Users: {{ $statistics->first()->monthly_active_users ?? 0 }}</p>
+        <p class="geex-content__header__subtitle">
+            <span class="badge bg-primary me-2">
+                <i class="uil uil-users-alt me-1"></i>
+                {{ $statistics->first()->monthly_active_users ?? 0 }}
+            </span>
+            Total Monthly Active Users
+        </p>
     </div> 
     
     <div class="geex-content__header__action">
@@ -167,8 +321,11 @@
     <!-- Real-time Network Bandwidth Usage Summary -->
     <div class="geex-content__section-wrapper mb-4">
         <div class="card shadow-sm">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                <h5 class="mb-0">Utilisation de la bande passante en temps réel</h5>
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <i class="uil uil-chart-line text-primary me-2" style="font-size: 1.5rem;"></i>
+                    <h5 class="mb-0">Utilisation de la bande passante en temps réel</h5>
+                </div>
                 <div class="d-flex">
                     <button id="refresh-btn" class="btn btn-sm btn-outline-primary me-2" onclick="refreshBandwidthData(); return false;">
                         <i class="uil uil-sync"></i> Actualiser
@@ -197,6 +354,7 @@
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
                         <div class="card border-0 bg-light h-100 metric-card">
                             <div class="card-body text-center">
+                                <i class="uil uil-users-alt text-primary mb-2" style="font-size: 2rem;"></i>
                                 <h6 class="text-muted mb-2">Utilisateurs actifs</h6>
                                 <h2 class="mb-0 fw-bold">{{ count($activeConnections) }}</h2>
                             </div>
@@ -205,6 +363,7 @@
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
                         <div class="card border-0 bg-light h-100 metric-card">
                             <div class="card-body text-center">
+                                <i class="uil uil-arrow-down text-primary mb-2" style="font-size: 2rem;"></i>
                                 <h6 class="text-muted mb-2">Total Download</h6>
                                 <h2 class="mb-0 fw-bold text-primary">{{ $totalRxRateFormatted }}</h2>
                                 <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
@@ -214,6 +373,7 @@
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
                         <div class="card border-0 bg-light h-100 metric-card">
                             <div class="card-body text-center">
+                                <i class="uil uil-arrow-up text-success mb-2" style="font-size: 2rem;"></i>
                                 <h6 class="text-muted mb-2">Total Upload</h6>
                                 <h2 class="mb-0 fw-bold text-success">{{ $totalTxRateFormatted }}</h2>
                                 <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['downloaded'] }} total</p>
@@ -223,6 +383,7 @@
                     <div class="col-md-3 col-sm-6">
                         <div class="card border-0 bg-light h-100 metric-card">
                             <div class="card-body text-center">
+                                <i class="uil uil-analysis text-muted mb-2" style="font-size: 2rem;"></i>
                                 <h6 class="text-muted mb-2">Moyenne par utilisateur</h6>
                                 <div class="d-flex justify-content-center align-items-center">
                                     <div class="text-primary me-3">
@@ -241,14 +402,18 @@
                 <div class="row mb-4">
                     <div class="col-12">
                         <div class="card shadow-sm">
-                            <div class="card-header bg-white py-3">
-                                <h5 class="mb-0">Total Cumulative Data Usage</h5>
+                            <div class="card-header bg-white">
+                                <div class="d-flex align-items-center">
+                                    <i class="uil uil-database text-primary me-2" style="font-size: 1.25rem;"></i>
+                                    <h5 class="mb-0">Total Cumulative Data Usage</h5>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-4 mb-3 mb-md-0">
                                         <div class="card border-0 bg-light h-100 metric-card">
                                             <div class="card-body text-center">
+                                                <i class="uil uil-arrow-down text-primary mb-2" style="font-size: 1.75rem;"></i>
                                                 <h6 class="text-muted mb-2">Total Downloaded</h6>
                                                 <h2 class="mb-0 fw-bold text-primary">
                                                     {{ $formattedDatabaseTotals['uploaded'] }}
@@ -259,6 +424,7 @@
                                     <div class="col-md-4 mb-3 mb-md-0">
                                         <div class="card border-0 bg-light h-100 metric-card">
                                             <div class="card-body text-center">
+                                                <i class="uil uil-arrow-up text-success mb-2" style="font-size: 1.75rem;"></i>
                                                 <h6 class="text-muted mb-2">Total Uploaded</h6>
                                                 <h2 class="mb-0 fw-bold text-success">
                                                     {{ $formattedDatabaseTotals['downloaded'] }}
@@ -269,6 +435,7 @@
                                     <div class="col-md-4">
                                         <div class="card border-0 bg-light h-100 metric-card">
                                             <div class="card-body text-center">
+                                                <i class="uil uil-data-sharing text-dark mb-2" style="font-size: 1.75rem;"></i>
                                                 <h6 class="text-muted mb-2">Total Bandwidth Usage</h6>
                                                 <h2 class="mb-0 fw-bold text-dark">
                                                     {{ $formattedDatabaseTotals['total'] }}
@@ -326,12 +493,16 @@
 <div class="geex-content__wrapper">
     <div class="geex-content__section-wrapper mb-4">
         <div class="card shadow-sm">
-            <div class="card-header bg-white py-3">
+            <div class="card-header bg-white">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Utilisateurs actifs avec utilisation de bande passante</h5>
+                    <div class="d-flex align-items-center">
+                        <i class="uil uil-users-alt text-primary me-2" style="font-size: 1.25rem;"></i>
+                        <h5 class="mb-0">Utilisateurs actifs avec utilisation de bande passante</h5>
+                    </div>
+                    <span class="badge bg-primary">{{ count($activeConnections) }} actifs</span>
                 </div>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
                         <thead>
@@ -347,15 +518,22 @@
                         <tbody>
                             @forelse ($activeConnections as $connection)
                             <tr>
-                                <td>{{ $connection['username'] }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar-sm bg-light rounded-circle text-center me-2" style="width: 32px; height: 32px; line-height: 32px;">
+                                            <i class="uil uil-user text-primary"></i>
+                                        </div>
+                                        <span class="fw-medium">{{ $connection['username'] }}</span>
+                                    </div>
+                                </td>
                                 <td>{{ $connection['ip_address'] }}</td>
-                                <td><span class="small text-muted">{{ $connection['mac_address'] }}</span></td>
+                                <td><span class="small text-muted font-monospace">{{ $connection['mac_address'] }}</span></td>
                                 <td>
                                     <div class="d-flex flex-column">
                                         @if((int)$connection['tx_rate_raw'] > 0)
                                             <span class="badge bg-success rounded-pill mb-1">{{ $connection['tx_rate'] }}</span>
                                         @endif
-                                        <span class="text-success">{{ $connection['bytes_out_formatted'] }}</span>
+                                        <span class="text-success fw-medium">{{ $connection['bytes_out_formatted'] }}</span>
                                     </div>
                                 </td>
                                 <td>
@@ -363,14 +541,24 @@
                                         <!-- @if((int)$connection['rx_rate_raw'] > 0)
                                             <span class="badge bg-primary rounded-pill mb-1">{{ $connection['rx_rate'] }}</span>
                                         @endif -->
-                                        <span class="text-primary">{{ $connection['bytes_in_formatted'] }}</span>
+                                        <span class="text-primary fw-medium">{{ $connection['bytes_in_formatted'] }}</span>
                                     </div>
                                 </td>
-                                <td>{{ $connection['uptime'] }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="uil uil-clock text-muted me-1"></i>
+                                        <span>{{ $connection['uptime'] }}</span>
+                                    </div>
+                                </td>
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="6" class="text-center py-4">Aucun utilisateur actif trouvé</td>
+                                <td colspan="6" class="text-center py-4">
+                                    <div class="py-3">
+                                        <i class="uil uil-users-alt text-muted" style="font-size: 2rem;"></i>
+                                        <p class="mt-2 mb-0">Aucun utilisateur actif trouvé</p>
+                                    </div>
+                                </td>
                             </tr>
                             @endforelse
                         </tbody>
@@ -388,8 +576,11 @@
             <!-- Daily Active Users Chart -->
             <div class="col-12 mb-4">
                 <div class="card shadow-sm">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0">Utilisateurs actifs quotidiens (30 derniers jours)</h5>
+                    <div class="card-header bg-white">
+                        <div class="d-flex align-items-center">
+                            <i class="uil uil-chart text-primary me-2" style="font-size: 1.25rem;"></i>
+                            <h5 class="mb-0">Utilisateurs actifs quotidiens (30 derniers jours)</h5>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div id="daily-active-users-chart"></div>
@@ -400,9 +591,14 @@
             <!-- Bandwidth Usage per User Chart -->
             <div class="col-md-6 mb-4">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                        <h5 class="mb-0">Utilisation de la bande passante par utilisateur</h5>
-                        <a href="#" class="btn btn-sm btn-outline-primary">Voir plus</a>
+                    <div class="card-header bg-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <i class="uil uil-chart-bar text-primary me-2" style="font-size: 1.25rem;"></i>
+                                <h5 class="mb-0">Utilisation de la bande passante par utilisateur</h5>
+                            </div>
+                            <a href="#" class="btn btn-sm btn-outline-primary">Voir plus</a>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div id="bandwidth-usage-chart"></div>
@@ -413,8 +609,11 @@
             <!-- User Activity by Hour Chart -->
             <div class="col-md-6 mb-4">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0">Activité des utilisateurs par heure de la journée</h5>
+                    <div class="card-header bg-white">
+                        <div class="d-flex align-items-center">
+                            <i class="uil uil-clock text-primary me-2" style="font-size: 1.25rem;"></i>
+                            <h5 class="mb-0">Activité des utilisateurs par heure de la journée</h5>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div id="user-activity-chart"></div>
