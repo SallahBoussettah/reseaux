@@ -184,8 +184,48 @@
     .metric-card {
         border-radius: var(--radius);
         transition: all 0.3s ease;
-        height: 100%;
-        background: linear-gradient(to bottom right, rgba(var(--blue-light), 0.05), white);
+        height: 100% !important;
+    }
+    
+    /* Card colors with direct values and maximum specificity */
+    .card.border-0.metric-card.primary {
+        background: linear-gradient(135deg, #3B82F6, #60A5FA) !important;
+        background-color: #3B82F6 !important;
+        color: white !important;
+    }
+    
+    .card.border-0.metric-card.success {
+        background: linear-gradient(135deg, #10B981, #34D399) !important;
+        background-color: #10B981 !important;
+        color: white !important;
+    }
+    
+    .card.border-0.metric-card.purple {
+        background: linear-gradient(135deg, #6366F1, #8B5CF6) !important;
+        background-color: #6366F1 !important;
+        color: white !important;
+    }
+    
+    .card.border-0.metric-card.orange {
+        background: linear-gradient(135deg, #F59E0B, #D97706) !important;
+        background-color: #F59E0B !important;
+        color: white !important;
+    }
+    
+    /* Override Bootstrap's bg-light */
+    .bg-light, div.bg-light {
+        background-color: transparent !important;
+    }
+    
+    /* When using white background cards, adjust text colors */
+    .metric-card.white {
+        background: white !important;
+        box-shadow: var(--shadow);
+        border: 1px solid #E5E7EB;
+    }
+    
+    .metric-card.white h2, .metric-card.white h6 {
+        color: var(--gray-800);
     }
     
     .metric-card:hover {
@@ -203,7 +243,6 @@
         font-size: 0.875rem;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: var(--blue);
         margin-bottom: 0.75rem;
     }
     
@@ -323,6 +362,31 @@
         background-color: rgba(59, 130, 246, 0.1);
         color: var(--blue);
     }
+
+    /* Highest priority card styles to override any conflicting styles */
+    .card.border-0.metric-card.primary {
+        background: linear-gradient(135deg, #3B82F6, #60A5FA) !important;
+        background-color: #3B82F6 !important;
+        color: white !important;
+    }
+
+    .card.border-0.metric-card.success {
+        background: linear-gradient(135deg, #10B981, #34D399) !important;
+        background-color: #10B981 !important;
+        color: white !important;
+    }
+
+    .card.border-0.metric-card.purple {
+        background: linear-gradient(135deg, #6366F1, #8B5CF6) !important;
+        background-color: #6366F1 !important;
+        color: white !important;
+    }
+
+    .card.border-0.metric-card.orange {
+        background: linear-gradient(135deg, #F59E0B, #D97706) !important;
+        background-color: #F59E0B !important;
+        color: white !important;
+    }
 </style>
 @endsection
 
@@ -332,10 +396,10 @@
         <h2 class="geex-content__header__title">Statistique</h2>
         <p class="geex-content__header__subtitle">
             <span class="badge bg-primary me-2">
-                <i class="uil uil-users-alt me-1"></i>
-                {{ $statistics->first()->monthly_active_users ?? 0 }}
+                <i class="uil uil-signal-alt me-1"></i>
+                Réseau Actif
             </span>
-            Total Monthly Active Users
+            <span class="text-muted">Dernière mise à jour: {{ now()->format('d/m/Y H:i') }}</span>
         </p>
     </div> 
     
@@ -387,44 +451,44 @@
                 <!-- Stats Cards Row -->
                 <div class="row mb-4">
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
-                        <div class="card border-0 bg-light h-100 metric-card">
+                        <div class="card border-0 metric-card purple">
                             <div class="card-body text-center">
-                                <i class="uil uil-users-alt text-primary mb-2" style="font-size: 2rem;"></i>
-                                <h6 class="text-muted mb-2">Utilisateurs actifs</h6>
-                                <h2 class="mb-0 fw-bold">{{ count($activeConnections) }}</h2>
+                                <i class="uil uil-users-alt text-white mb-2" style="font-size: 2rem;"></i>
+                                <h6 class="text-white mb-2">Utilisateurs actifs</h6>
+                                <h2 class="mb-0 fw-bold text-white">{{ count($activeConnections) }}</h2>
                             </div>
                         </div> 
                     </div>
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
-                        <div class="card border-0 bg-light h-100 metric-card">
+                        <div class="card border-0 metric-card primary">
                             <div class="card-body text-center">
-                                <i class="uil uil-arrow-down text-primary mb-2" style="font-size: 2rem;"></i>
-                                <h6 class="text-muted mb-2">Total Download</h6>
-                                <h2 class="mb-0 fw-bold text-primary">{{ $totalRxRateFormatted }}</h2>
-                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
+                                <i class="uil uil-arrow-down text-white mb-2" style="font-size: 2rem;"></i>
+                                <h6 class="text-white mb-2">Total Download</h6>
+                                <h2 class="mb-0 fw-bold text-white">{{ $totalRxRateFormatted }}</h2>
+                                <p class="small text-white mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-3 col-sm-6 mb-3 mb-md-0">
-                        <div class="card border-0 bg-light h-100 metric-card">
+                        <div class="card border-0 metric-card success">
                             <div class="card-body text-center">
-                                <i class="uil uil-arrow-up text-success mb-2" style="font-size: 2rem;"></i>
-                                <h6 class="text-muted mb-2">Total Upload</h6>
-                                <h2 class="mb-0 fw-bold text-success">{{ $totalTxRateFormatted }}</h2>
-                                <p class="small text-muted mt-2">{{ $formattedDatabaseTotals['downloaded'] }} total</p>
+                                <i class="uil uil-arrow-up text-white mb-2" style="font-size: 2rem;"></i>
+                                <h6 class="text-white mb-2">Total Upload</h6>
+                                <h2 class="mb-0 fw-bold text-white">{{ $totalTxRateFormatted }}</h2>
+                                <p class="small text-white mt-2">{{ $formattedDatabaseTotals['downloaded'] }} total</p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-3 col-sm-6">
-                        <div class="card border-0 bg-light h-100 metric-card">
+                        <div class="card border-0 metric-card orange">
                             <div class="card-body text-center">
-                                <i class="uil uil-analysis text-muted mb-2" style="font-size: 2rem;"></i>
-                                <h6 class="text-muted mb-2">Moyenne par utilisateur</h6>
+                                <i class="uil uil-analysis text-white mb-2" style="font-size: 2rem;"></i>
+                                <h6 class="text-white mb-2">Moyenne par utilisateur</h6>
                                 <div class="d-flex justify-content-center align-items-center">
-                                    <div class="text-primary me-3">
+                                    <div class="text-white me-3">
                                         <i class="uil uil-arrow-down"></i> {{ $averageRxRate }}
                                     </div>
-                                    <div class="text-success">
+                                    <div class="text-white">
                                         <i class="uil uil-arrow-up"></i> {{ $averageTxRate }}
                                     </div>
                                 </div>
@@ -446,33 +510,33 @@
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-4 mb-3 mb-md-0">
-                                        <div class="card border-0 bg-light h-100 metric-card">
+                                        <div class="card border-0 metric-card primary">
                                             <div class="card-body text-center">
-                                                <i class="uil uil-arrow-down text-primary mb-2" style="font-size: 1.75rem;"></i>
-                                                <h6 class="text-muted mb-2">Total Downloaded</h6>
-                                                <h2 class="mb-0 fw-bold text-primary">
+                                                <i class="uil uil-arrow-down text-white mb-2" style="font-size: 1.75rem;"></i>
+                                                <h6 class="text-white mb-2">Total Downloaded</h6>
+                                                <h2 class="mb-0 fw-bold text-white">
                                                     {{ $formattedDatabaseTotals['uploaded'] }}
                                                 </h2>
                                             </div>
                                         </div>
                                     </div>
                                     <div class="col-md-4 mb-3 mb-md-0">
-                                        <div class="card border-0 bg-light h-100 metric-card">
+                                        <div class="card border-0 metric-card success">
                                             <div class="card-body text-center">
-                                                <i class="uil uil-arrow-up text-success mb-2" style="font-size: 1.75rem;"></i>
-                                                <h6 class="text-muted mb-2">Total Uploaded</h6>
-                                                <h2 class="mb-0 fw-bold text-success">
+                                                <i class="uil uil-arrow-up text-white mb-2" style="font-size: 1.75rem;"></i>
+                                                <h6 class="text-white mb-2">Total Uploaded</h6>
+                                                <h2 class="mb-0 fw-bold text-white">
                                                     {{ $formattedDatabaseTotals['downloaded'] }}
                                                 </h2>
                                             </div>
                                         </div>
                                     </div>
                                     <div class="col-md-4">
-                                        <div class="card border-0 bg-light h-100 metric-card">
+                                        <div class="card border-0 metric-card purple">
                                             <div class="card-body text-center">
-                                                <i class="uil uil-data-sharing text-dark mb-2" style="font-size: 1.75rem;"></i>
-                                                <h6 class="text-muted mb-2">Total Bandwidth Usage</h6>
-                                                <h2 class="mb-0 fw-bold text-dark">
+                                                <i class="uil uil-data-sharing text-white mb-2" style="font-size: 1.75rem;"></i>
+                                                <h6 class="text-white mb-2">Total Bandwidth Usage</h6>
+                                                <h2 class="mb-0 fw-bold text-white">
                                                     {{ $formattedDatabaseTotals['total'] }}
                                                 </h2>
                                             </div>
@@ -677,6 +741,34 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshBandwidthData();
         });
     }
+    
+    // Apply card styles directly to bypass any CSS conflicts
+    const applyCardStyles = function() {
+        // Force the card colors using direct DOM manipulation
+        document.querySelectorAll('.card.border-0.metric-card.primary').forEach(card => {
+            card.style.background = 'linear-gradient(135deg, #3B82F6, #60A5FA)';
+            card.style.color = 'white';
+        });
+        
+        document.querySelectorAll('.card.border-0.metric-card.success').forEach(card => {
+            card.style.background = 'linear-gradient(135deg, #10B981, #34D399)';
+            card.style.color = 'white';
+        });
+        
+        document.querySelectorAll('.card.border-0.metric-card.purple').forEach(card => {
+            card.style.background = 'linear-gradient(135deg, #6366F1, #8B5CF6)';
+            card.style.color = 'white';
+        });
+        
+        document.querySelectorAll('.card.border-0.metric-card.orange').forEach(card => {
+            card.style.background = 'linear-gradient(135deg, #F59E0B, #D97706)';
+            card.style.color = 'white';
+        });
+    };
+    
+    // Apply styles immediately and after a small delay (in case of dynamic content)
+    applyCardStyles();
+    setTimeout(applyCardStyles, 100);
     
     if (autoRefreshBtn) {
         autoRefreshBtn.addEventListener('click', function(e) {
