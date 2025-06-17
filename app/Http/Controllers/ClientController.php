@@ -124,17 +124,31 @@ class ClientController extends Controller
         // Send verification email with token
         try {
             $verificationUrl = route('token.verification');
-            Mail::send('emails.token_verification', [
+            
+            // Determine which email template to use based on the user's language
+            $emailTemplate = 'emails.token_verification';
+            $emailSubject = 'Votre code de vérification WiFi';
+            
+            if ($validatedData['language'] === 'fr') {
+                $emailTemplate = 'emails.token_verification_fr';
+                $emailSubject = 'Votre code de vérification WiFi';
+            } else {
+                $emailTemplate = 'emails.token_verification_en';
+                $emailSubject = 'Your WiFi Verification Code';
+            }
+            
+            Mail::send($emailTemplate, [
                 'verificationToken' => $verificationToken,
-                'verificationUrl' => $verificationUrl
-            ], function ($message) use ($validatedData) {
+                'verificationUrl' => $verificationUrl,
+                'language' => $validatedData['language']
+            ], function ($message) use ($validatedData, $emailSubject) {
                 $message->to($validatedData['email'])
-                    ->subject('Votre code de vérification WiFi')
+                    ->subject($emailSubject)
                     ->from('wifi@eureka-communication.com');
             });
             
             // Log successful email sending attempt
-            \Log::info('Verification token sent to: ' . $validatedData['email'] . ' with token: ' . $verificationToken);
+            \Log::info('Verification token sent to: ' . $validatedData['email'] . ' with token: ' . $verificationToken . ' using template: ' . $emailTemplate);
             
             // Add a success message
             session()->flash('status', 'Verification code has been sent to your email. Please check your inbox.');

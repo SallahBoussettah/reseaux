@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Votre code de vérification</title>
+    <title>WiFi Verification Code</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -59,26 +59,74 @@
 <body>
     <div class="container">
         <div class="header">
-            <h2>Votre code de vérification WiFi</h2>
+            <h2>
+                @if(isset($language) && $language === 'fr')
+                    Votre code de vérification WiFi
+                @else
+                    Your WiFi Verification Code
+                @endif
+            </h2>
         </div>
         
-        <p>Bonjour,</p>
+        <p>
+            @if(isset($language) && $language === 'fr')
+                Bonjour,
+            @else
+                Hello,
+            @endif
+        </p>
         
-        <p>Merci d'avoir utilisé notre service WiFi. Pour accéder à votre connexion premium, veuillez utiliser le code de vérification ci-dessous:</p>
+        <p>
+            @if(isset($language) && $language === 'fr')
+                Merci d'avoir utilisé notre service WiFi. Pour accéder à votre connexion premium, veuillez utiliser le code de vérification ci-dessous:
+            @else
+                Thank you for using our WiFi service. To access your premium connection, please use the verification code below:
+            @endif
+        </p>
         
         <div class="token">{{ $verificationToken }}</div>
         
-        <p>Ce code est valable pendant 15 minutes. Si vous ne l'utilisez pas dans ce délai, vous devrez demander un nouveau code.</p>
+        <p>
+            @if(isset($language) && $language === 'fr')
+                Ce code est valable pendant 15 minutes. Si vous ne l'utilisez pas dans ce délai, vous devrez demander un nouveau code.
+            @else
+                This code is valid for 15 minutes. If you don't use it within this period, you'll need to request a new code.
+            @endif
+        </p>
         
         <div class="verification-link">
-            <p>Cliquez sur le bouton ci-dessous pour entrer votre code:</p>
-            <a href="{{ url(route('token.verification')) }}">Vérifier mon code</a>
+            <p>
+                @if(isset($language) && $language === 'fr')
+                    Cliquez sur le bouton ci-dessous pour entrer votre code:
+                @else
+                    Click the button below to enter your code:
+                @endif
+            </p>
+            <a href="{{ url(route('token.verification')) }}">
+                @if(isset($language) && $language === 'fr')
+                    Vérifier mon code
+                @else
+                    Verify My Code
+                @endif
+            </a>
         </div>
         
-        <p>Si vous n'avez pas demandé ce code, veuillez ignorer cet email.</p>
+        <p>
+            @if(isset($language) && $language === 'fr')
+                Si vous n'avez pas demandé ce code, veuillez ignorer cet email.
+            @else
+                If you didn't request this code, please ignore this email.
+            @endif
+        </p>
         
         <div class="footer">
-            <p>&copy; {{ date('Y') }} Eureka Digital. Tous droits réservés.</p>
+            <p>
+                @if(isset($language) && $language === 'fr')
+                    &copy; {{ date('Y') }} Eureka Digital. Tous droits réservés.
+                @else
+                    &copy; {{ date('Y') }} Eureka Digital. All rights reserved.
+                @endif
+            </p>
         </div>
     </div>
 </body>
