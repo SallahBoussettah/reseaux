@@ -127,14 +127,14 @@ class ClientController extends Controller
             
             // Determine which email template to use based on the user's language
             $emailTemplate = 'emails.token_verification';
-            $emailSubject = 'Votre code de vérification WiFi';
+            $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Your WiFi Verification Code');
             
             if ($validatedData['language'] === 'fr') {
                 $emailTemplate = 'emails.token_verification_fr';
-                $emailSubject = 'Votre code de vérification WiFi';
+                $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Votre code de vérification WiFi');
             } else {
                 $emailTemplate = 'emails.token_verification_en';
-                $emailSubject = 'Your WiFi Verification Code';
+                $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Your WiFi Verification Code');
             }
             
             Mail::send($emailTemplate, [
@@ -401,7 +401,7 @@ class ClientController extends Controller
                     }
                     
                     // Update both clients
-                    $clientToUpdate->premium_expires_at = now()->addDays(7);
+                    $clientToUpdate->premium_expires_at = now()->addDays((int)\App\Models\Setting::get('email_premium_duration_days', 7));
                     $clientToUpdate->profile_type = 'premium_user'; 
                     $clientToUpdate->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
                     $clientToUpdate->save();
@@ -483,7 +483,7 @@ class ClientController extends Controller
             // Mark the user as verified
             $client->email_verified_at = now();
             $client->remember_token = '';  // Clear the token to prevent reuse
-            $client->premium_expires_at = now()->addDays(7);
+            $client->premium_expires_at = now()->addDays((int)\App\Models\Setting::get('email_premium_duration_days', 7));
             $client->profile_type = 'premium_user'; // Set profile type to premium_user
             $client->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
             $client->save();

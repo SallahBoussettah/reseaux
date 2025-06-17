@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Your Verification Code</title>
+    <title>{{ \App\Models\Setting::get('email_verification_subject_en', 'Your Verification Code') }}</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -39,7 +39,7 @@
         .verification-link a {
             display: inline-block;
             padding: 10px 20px;
-            background-color: #4CAF50;
+            background-color: {{ \App\Models\Setting::get('secondary_color', '#4CAF50') }};
             color: white;
             text-decoration: none;
             border-radius: 5px;
@@ -59,23 +59,23 @@
 <body>
     <div class="container">
         <div class="header">
-            <h2>Your WiFi Verification Code</h2>
+            <h2>{{ \App\Models\Setting::get('email_verification_heading_en', 'Your WiFi Verification Code') }}</h2>
         </div>
         
-        <p>Hello,</p>
+        <p>{{ \App\Models\Setting::get('email_verification_greeting_en', 'Hello,') }}</p>
         
-        <p>Thank you for using our WiFi service. To access your premium connection, please use the verification code below:</p>
+        <p>{{ \App\Models\Setting::get('email_verification_intro_en', 'Thank you for using our WiFi service. To access your premium connection, please use the verification code below:') }}</p>
         
         <div class="token">{{ $verificationToken }}</div>
         
-        <p>This code is valid for 15 minutes. If you don't use it within this period, you'll need to request a new code.</p>
+        <p>{{ \App\Models\Setting::get('email_verification_expiry_text_en', 'This code is valid for 15 minutes. If you don\'t use it within this period, you\'ll need to request a new code.') }}</p>
         
         <div class="verification-link">
-            <p>Click the button below to enter your code:</p>
-            <a href="{{ url(route('token.verification')) }}">Verify My Code</a>
+            <p>{{ \App\Models\Setting::get('email_verification_button_intro_en', 'Click the button below to enter your code:') }}</p>
+            <a href="{{ url(route('token.verification')) }}">{{ \App\Models\Setting::get('email_verification_button_text_en', 'Verify My Code') }}</a>
         </div>
         
-        <p>If you didn't request this code, please ignore this email.</p>
+        <p>{{ \App\Models\Setting::get('email_verification_footer_en', 'If you didn\'t request this code, please ignore this email.') }}</p>
         
         <div class="footer">
             <p>&copy; {{ date('Y') }} Eureka Digital. All rights reserved.</p>
