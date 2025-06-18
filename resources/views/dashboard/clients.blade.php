@@ -468,9 +468,9 @@
         
         <div style="display: flex; align-items: center;">
             <div style="display: flex; gap: 1rem; align-items: center;">
-                <a href="{{ route('test.delete.expired') }}" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: #3B82F6; color: white; border-radius: 8px; font-size: 0.875rem; font-weight: 500; transition: all 0.2s; text-decoration: none;">
-                    <i class="uil uil-trash-alt"></i>
-                    Test Delete Expired Users
+                <a href="{{ route('test.delete.expired') }}" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: #3B82F6; color: white; border-radius: 8px; font-size: 0.875rem; font-weight: 500; transition: all 0.2s;" onclick="return confirm('Are you sure? This will remove expired users from router and disable them in database.');">
+                    <i class="uil uil-users-alt"></i>
+                    Process Expired Users
                 </a>
                 <div style="position: relative; width: 250px;">
                     <input type="text" id="clientSearch" placeholder="Search clients..." style="width: 100%; padding: 0.5rem 1rem 0.5rem 2.5rem; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 0.875rem;">
@@ -603,13 +603,15 @@
                                     Deactivate
                                 </button>
                             </form>
+                            @elseif ($client->status === 'disabled')
+                            <span style="display: inline-block; padding: 0.375rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 500; background-color: #FF9800; color: white;">Disabled</span>
                             @else
                             <span style="display: inline-block; padding: 0.375rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 500; background-color: #E5E7EB; color: #4B5563;">Deactivated</span>
                             @endif
                             
-                            <a href="{{ route('schedule.deletion', $client->id) }}" onclick="return confirm('Are you sure you want to schedule this user for deletion in 1 minute?');" style="display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all 0.2s; border: none; background-color: #F59E0B; color: white; text-decoration: none;">
+                            <a href="{{ route('schedule.deletion', $client->id) }}" onclick="return confirm('Are you sure you want to schedule this user for removal from router and disabling in 1 minute?');" style="display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 6px; font-size: 0.75rem; font-weight: 500; cursor: pointer; transition: all 0.2s; border: none; background-color: #F59E0B; color: white; text-decoration: none;">
                                 <i class="uil uil-schedule"></i>
-                                Schedule Deletion
+                                Schedule Removal
                             </a>
                         </div>
                     </td>

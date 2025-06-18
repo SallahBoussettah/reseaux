@@ -10,11 +10,13 @@ use RouterOS\Client as RouterOSAPI;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Models\Setting;
 
 class DeleteExpiredPremiumUsers extends Command
 {
     protected $signature = 'users:delete-expired';
-    protected $description = 'Delete users whose scheduled deletion time has passed';
+    protected $description = 'Remove users from router configuration, mark them as deactivated, and update profile_type to expired in the database if scheduled deletion time has passed';
 
     // MikroTik connection details from config
     protected $mikrotikConfig = [];
@@ -22,8 +24,9 @@ class DeleteExpiredPremiumUsers extends Command
     // Track statistics for reporting
     protected $stats = [
         'total_processed' => 0,
-        'db_deleted' => 0,
+        'db_deactivated' => 0,
         'router_deleted' => 0,
+        'emails_sent' => 0,
         'errors' => 0
     ];
 
@@ -50,8 +53,17 @@ class DeleteExpiredPremiumUsers extends Command
                              ->where('scheduled_deletion_at', '<', Carbon::now())
                              ->get();
 
-        $this->info('Found ' . $expiredUsers->count() . ' users scheduled for deletion.');
-        Log::info('Found ' . $expiredUsers->count() . ' users scheduled for deletion.');
+        $this->info('Found ' . $expiredUsers->count() . ' users scheduled for processing.');
+        Log::info('Found ' . $expiredUsers->count() . ' users scheduled for processing.');
+        
+        // Debug - print out user details
+        foreach ($expiredUsers as $user) {
+            $this->info('User: ' . $user->email . ' (ID: ' . $user->id . ')');
+            $this->info('  Status: ' . $user->status);
+            $this->info('  Profile Type: ' . $user->profile_type);
+            $this->info('  MAC Address: ' . ($user->mac_address ?? 'None'));
+            $this->info('  Scheduled Deletion: ' . $user->scheduled_deletion_at);
+        }
         
         if ($expiredUsers->count() === 0) {
             return Command::SUCCESS;
@@ -82,7 +94,7 @@ class DeleteExpiredPremiumUsers extends Command
         } catch (\Exception $e) {
             $this->error('Failed to connect to MikroTik router: ' . $e->getMessage());
             Log::error('Failed to connect to MikroTik router: ' . $e->getMessage());
-            // We'll continue with database deletion even if MikroTik connection fails
+            // We'll continue with database updates even if MikroTik connection fails
         }
         
         // Loop through each expired user
@@ -105,7 +117,7 @@ class DeleteExpiredPremiumUsers extends Command
                             'mac_address' => $user->mac_address,
                             'error' => $e->getMessage()
                         ]);
-                        // Continue with database deletion even if MikroTik removal fails
+                        // Continue with database update even if MikroTik removal fails
                     }
                 }
                 
@@ -113,19 +125,52 @@ class DeleteExpiredPremiumUsers extends Command
                 $userId = $user->id;
                 $userEmail = $user->email;
                 
-                // Delete the user from the database
-                $user->delete();
-                $this->stats['db_deleted']++;
+                // Update status to 'deactivated' (supported by schema) and profile_type to 'expired'
+                $user->status = 'deactivated';
+                $user->profile_type = 'expired';
+                
+                $this->info('Updating user in database: status = deactivated, profile_type = expired');
+                Log::info('Updating user in database', [
+                    'user_id' => $userId,
+                    'email' => $userEmail,
+                    'status' => 'deactivated', 
+                    'profile_type' => 'expired'
+                ]);
+                
+                $saved = $user->save();
+                
+                if ($saved) {
+                    $this->info('Successfully saved user changes to database');
+                    $this->stats['db_deactivated']++;
+                } else {
+                    $this->error('Failed to save user changes to database');
+                    throw new \Exception('Database save failed for user ID: ' . $userId);
+                }
                 
                 DB::commit();
                 
-                $this->info('Successfully deleted user: ' . $userEmail . ' (ID: ' . $userId . ')');
-                Log::info('Successfully deleted user: ' . $userEmail . ' (ID: ' . $userId . ')');
+                // After successfully disabling the user and removing from router, send feedback email
+                try {
+                    $this->sendFeedbackEmail($user);
+                    $this->stats['emails_sent']++;
+                    $this->info('Successfully sent feedback email to: ' . $userEmail);
+                    Log::info('Successfully sent feedback email to: ' . $userEmail);
+                } catch (\Exception $e) {
+                    $this->error('Failed to send feedback email to ' . $userEmail . ': ' . $e->getMessage());
+                    Log::error('Failed to send feedback email to ' . $userEmail . ': ' . $e->getMessage(), [
+                        'user_id' => $userId,
+                        'error' => $e->getMessage()
+                    ]);
+                    // Continue even if email sending fails
+                }
+                
+                $this->info('Successfully disabled user: ' . $userEmail . ' (ID: ' . $userId . ')');
+                Log::info('Successfully disabled user: ' . $userEmail . ' (ID: ' . $userId . ')');
             } catch (\Exception $e) {
                 DB::rollBack();
                 $this->stats['errors']++;
-                $this->error('Failed to delete user ' . $user->email . ': ' . $e->getMessage());
-                Log::error('Failed to delete user ' . $user->email . ': ' . $e->getMessage(), [
+                $this->error('Failed to disable user ' . $user->email . ': ' . $e->getMessage());
+                Log::error('Failed to disable user ' . $user->email . ': ' . $e->getMessage(), [
                     'user_id' => $user->id,
                     'error' => $e->getMessage()
                 ]);
@@ -136,22 +181,108 @@ class DeleteExpiredPremiumUsers extends Command
         
         // Output summary
         $this->info('');
-        $this->info('=== Deletion Summary ===');
+        $this->info('=== Processing Summary ===');
         $this->info('Total users processed: ' . $this->stats['total_processed']);
-        $this->info('Deleted from database: ' . $this->stats['db_deleted']);
-        $this->info('Deleted from router: ' . $this->stats['router_deleted']);
+        $this->info('Deactivated in database: ' . $this->stats['db_deactivated']);
+        $this->info('Removed from router: ' . $this->stats['router_deleted']);
+        $this->info('Feedback emails sent: ' . $this->stats['emails_sent']);
         $this->info('Errors encountered: ' . $this->stats['errors']);
         $this->info('Execution time: ' . $executionTime . ' seconds');
         
-        Log::info('User deletion completed', [
+        Log::info('User processing completed', [
             'total_processed' => $this->stats['total_processed'],
-            'db_deleted' => $this->stats['db_deleted'],
+            'db_deactivated' => $this->stats['db_deactivated'],
             'router_deleted' => $this->stats['router_deleted'],
+            'emails_sent' => $this->stats['emails_sent'],
             'errors' => $this->stats['errors'],
             'execution_time' => $executionTime
         ]);
         
         return Command::SUCCESS;
+    }
+    
+    /**
+     * Send a feedback email to the user
+     * 
+     * @param \App\Models\Client $user
+     * @return void
+     */
+    private function sendFeedbackEmail($user)
+    {
+        if (empty($user->email) || !filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
+            Log::warning('Invalid or missing email for user ID: ' . $user->id);
+            return;
+        }
+
+        // Skip sending email to token users
+        if (strpos($user->email, 'token_user') !== false) {
+            Log::info('Skipping feedback email for token user: ' . $user->email);
+            return;
+        }
+        
+        // Determine language based on user's language setting
+        $language = $user->language ?? 'en';
+        
+        // Get the logo URL from settings
+        $logo_url = Setting::get('email_logo_url', '');
+        
+        // Generate a feedback URL
+        $feedback_url = url('/feedback');
+        
+        // Determine which email template to use based on the language
+        $emailTemplate = 'emails.feedback';
+        $emailSubject = Setting::get('email_feedback_subject_en', 'Aqua Mirage Marrakech - Thank You for Your Stay');
+        
+        if ($language === 'fr') {
+            $emailTemplate = 'emails.feedback_fr';
+            $emailSubject = Setting::get('email_feedback_subject_fr', 'Aqua Mirage Marrakech - Merci pour votre séjour');
+        } else {
+            $emailTemplate = 'emails.feedback_en';
+            $emailSubject = Setting::get('email_feedback_subject_en', 'Aqua Mirage Marrakech - Thank You for Your Stay');
+        }
+        
+        // Check if the template exists
+        if (!view()->exists($emailTemplate)) {
+            Log::error('Email template does not exist', ['template' => $emailTemplate]);
+            throw new \Exception("Email template not found: {$emailTemplate}");
+        }
+        
+        // Prepare email data with all required variables that the template expects
+        $emailData = [
+            'language' => $language,
+            'logo_url' => $logo_url,
+            'hotel_name' => 'Aqua Mirage Marrakech',
+            'subject' => $emailSubject,
+            'greeting' => Setting::get($language === 'fr' ? 'email_feedback_greeting_fr' : 'email_feedback_greeting_en',
+                $language === 'fr' ? 'Cher(e) Client(e),' : 'Dear Guest,'),
+            'intro' => Setting::get($language === 'fr' ? 'email_feedback_intro_fr' : 'email_feedback_intro_en',
+                $language === 'fr' ? 'Nous espérons que vous avez apprécié votre séjour' : 'We hope you enjoyed your stay'),
+            'feedback_request' => Setting::get($language === 'fr' ? 'email_feedback_request_fr' : 'email_feedback_request_en',
+                $language === 'fr' ? 'Nous apprécierions vos commentaires' : 'We would appreciate your feedback'),
+            'button_text' => Setting::get($language === 'fr' ? 'email_feedback_button_text_fr' : 'email_feedback_button_text_en',
+                $language === 'fr' ? 'Partagez Votre Avis' : 'Share Your Feedback'),
+            'closing' => Setting::get($language === 'fr' ? 'email_feedback_closing_fr' : 'email_feedback_closing_en',
+                $language === 'fr' ? 'Nous espérons vous accueillir à nouveau' : 'We hope to welcome you back soon'),
+            'footer' => Setting::get($language === 'fr' ? 'email_feedback_footer_fr' : 'email_feedback_footer_en',
+                $language === 'fr' ? '© 2025 Aqua Mirage Marrakech. Tous droits réservés.' : '© 2025 Aqua Mirage Marrakech. All rights reserved.'),
+            'feedback_url' => $feedback_url
+        ];
+        
+        Log::info('Preparing to send feedback email', [
+            'email' => $user->email,
+            'template' => $emailTemplate,
+            'language' => $language
+        ]);
+        
+        // Send email
+        Mail::send($emailTemplate, $emailData, function ($message) use ($user, $emailSubject) {
+            $message->to($user->email)
+                ->subject($emailSubject)
+                ->from(config('mail.from.address', 'hotel@aquamiragemarrakech.com'), 
+                      config('mail.from.name', 'Aqua Mirage Marrakech'));
+        });
+        
+        Log::info('Feedback email sent to: ' . $user->email . ' using template: ' . $emailTemplate);
     }
     
     /**

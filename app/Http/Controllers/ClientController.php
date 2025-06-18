@@ -45,18 +45,164 @@ class ClientController extends Controller
         return view('home');
     }
 
+    /**
+     * Check if a user with the given email exists and is expired
+     * If so, send a new verification code to reactivate the account
+     * 
+     * @param string $email
+     * @return Client|false Returns the client if found and reactivation initiated, false otherwise
+     */
+    private function checkAndReactivateExpiredUser($email, $mac_address)
+    {
+        // Check if there's an existing user with expired status
+        $existingUser = Client::where('email', $email)
+                            ->where('profile_type', 'expired')
+                            ->where('status', 'deactivated')
+                            ->first();
+        
+        if (!$existingUser) {
+            return false;
+        }
+        
+        // Log that we found an expired user
+        \Log::info('Found expired user with email: ' . $email . '. Initiating reactivation process.');
+        
+        // Generate a new 6-digit verification token
+        $verificationToken = mt_rand(100000, 999999);
+        
+        // Set token expiration to 15 minutes from now
+        $tokenExpiration = now()->addMinutes(15);
+        
+        // Update the user with the new token
+        $existingUser->verification_token = (string)$verificationToken;
+        $existingUser->verification_token_expires_at = $tokenExpiration;
+        $existingUser->verification_token_attempts = 0;
+        
+        // Update MAC address if it's different (user might be using a new device)
+        if ($existingUser->mac_address !== $mac_address) {
+            \Log::info('Updating MAC address for user: ' . $email . ' from ' . $existingUser->mac_address . ' to ' . $mac_address);
+            $existingUser->mac_address = $mac_address;
+        }
+        
+        $existingUser->save();
+        
+        // Send verification email with the new token
+        $this->sendVerificationEmail($existingUser, $verificationToken);
+        
+        \Log::info('Expired user reactivation initiated for: ' . $email . ' with new token');
+        
+        return $existingUser;
+    }
+    
+    /**
+     * Send a verification email to a user
+     * 
+     * @param Client $user
+     * @param string $verificationToken
+     * @return bool
+     */
+    private function sendVerificationEmail($user, $verificationToken)
+    {
+        try {
+            $verificationUrl = route('token.verification');
+            
+            // Determine which email template to use based on the user's language
+            $emailTemplate = 'emails.token_verification';
+            $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
+            
+            if ($user->language === 'fr') {
+                $emailTemplate = 'emails.token_verification_fr';
+                $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Aqua Mirage Marrakech - Votre code d\'accès WiFi');
+            } else {
+                $emailTemplate = 'emails.token_verification_en';
+                $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
+            }
+            
+            // Get the logo URL from settings
+            $logo_url = \App\Models\Setting::get('email_logo_url', '');
+            
+            Mail::send($emailTemplate, [
+                'verificationToken' => $verificationToken,
+                'verificationUrl' => $verificationUrl,
+                'language' => $user->language,
+                'logo_url' => $logo_url
+            ], function ($message) use ($user, $emailSubject) {
+                $message->to($user->email)
+                    ->subject($emailSubject)
+                    ->from(config('mail.from.address', 'hotel@aquamiragemarrakech.com'), 
+                          config('mail.from.name', 'Aqua Mirage Marrakech'));
+            });
+            
+            // Log successful email sending attempt
+            \Log::info('Verification token sent to: ' . $user->email . ' with token: ' . $verificationToken . ' using template: ' . $emailTemplate);
+            
+            return true;
+        } catch (\Exception $e) {
+            // Log email sending error
+            \Log::error('Failed to send verification email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     public function store(Request $request)
     {
         $validatedData = $request->validate([
             'full_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:clients',
+            'email' => 'required|email',  // Removed the unique constraint to allow expired users
             'mac' => 'required',
             'gender' => 'required|in:male,female,other'
         ]);
 
         $mac_address = $request->input('mac');
-        
         $validatedData['mac_address'] = $mac_address;
+        
+        // First check if this is an expired user trying to get back in
+        $reactivatedUser = $this->checkAndReactivateExpiredUser($validatedData['email'], $mac_address);
+        
+        if ($reactivatedUser) {
+            // User was found and reactivation process started
+            $router_ip = '10.5.50.1';
+            
+            // Store the verification token in the session as a backup
+            session(['backup_token' => $reactivatedUser->verification_token]);
+            session(['mac_address' => $mac_address]);
+            
+            // Add a success message for the user
+            session()->flash('status', 'We found your previous account. A verification code has been sent to your email. Please check your inbox to reactivate your account.');
+            
+            // Add user to MikroTik hotspot with free profile
+            try {
+                $this->mikroTikService->addHotspotUser($reactivatedUser->email, $mac_address, 'free_user');
+                \Log::info('User added to MikroTik hotspot as free_user: ' . $reactivatedUser->email);
+            } catch (\Exception $e) {
+                \Log::error('Failed to add user to MikroTik hotspot: ' . $e->getMessage());
+                // Continue anyway, as we'll verify later
+            }
+            
+            // Redirect to token verification page
+            return redirect()->route('token.verification')->with([
+                'email' => $reactivatedUser->email,
+                'token_generated' => true,
+                'mac_address' => $mac_address,
+                'router_ip' => $router_ip,
+                'login_url' => 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address
+            ]);
+        }
+        
+        // If we get here, either the user is new or not expired, continue with normal registration
+        
+        // Check if email already exists but is not expired
+        $existingUser = Client::where('email', $validatedData['email'])
+                            ->where(function($query) {
+                                $query->where('profile_type', '!=', 'expired')
+                                      ->orWhere('status', '!=', 'deactivated');
+                            })
+                            ->first();
+                            
+        if ($existingUser) {
+            // Email already exists and user is not expired
+            return redirect()->back()->withErrors(['email' => 'Email already registered. Please use a different email address.'])->withInput();
+        }
 
         // Generate a 6-digit verification token
         $verificationToken = mt_rand(100000, 999999);
@@ -386,6 +532,47 @@ class ClientController extends Controller
                         $temporaryClient->verification_token_expires_at = $client->verification_token_expires_at;
                     }
                     
+                    // Check if this is a reactivation of an expired user
+                    $isReactivation = $clientToUpdate->profile_type === 'expired' && $clientToUpdate->status === 'deactivated';
+                    
+                    if ($isReactivation) {
+                        \Log::info('Reactivating expired user: ' . $clientToUpdate->email);
+                        
+                        // Reactivate the user as a free user
+                        $clientToUpdate->profile_type = 'free_user';
+                        $clientToUpdate->status = 'active';
+                        $clientToUpdate->email_verified_at = now();
+                        $clientToUpdate->scheduled_deletion_at = null; // Clear the scheduled deletion
+                        $clientToUpdate->verification_token_attempts = 0; // Reset attempts counter
+                        
+                        // Update user profile in MikroTik
+                        $this->mikroTikService->updateUserProfile($clientToUpdate->mac_address, 'free_user');
+                        
+                        // Track successful verifications
+                        $clientToUpdate->successful_verifications = ($clientToUpdate->successful_verifications ?? 0) + 1;
+                        
+                        // Save the updates
+                        $clientToUpdate->save();
+                        
+                        \Log::info('Successfully reactivated user: ' . $clientToUpdate->email);
+                        
+                        // Clear session data
+                        session()->forget(['backup_token', 'temp_client_id', 'token_registration']);
+                        
+                        // Redirect to router with free user access
+                        $router_ip = session('router_ip') ?? '10.5.50.1';
+                        $mac_address = $clientToUpdate->mac_address;
+                        
+                        // Format the redirect URL correctly
+                        $redirect_url = 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address;
+                        $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
+                        
+                        \Log::info("Redirecting reactivated user to router: $redirect_url with destination: $original_destination");
+                        
+                        return redirect($redirect_url . '&dst=' . urlencode($original_destination));
+                    }
+                    
+                    // Regular verification flow for new or active users (existing code)
                     // Update user profile in MikroTik using the client to update (temp or original)
                     $this->mikroTikService->updateUserProfile($clientToUpdate->mac_address, 'premium_user');
                     

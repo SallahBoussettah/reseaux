@@ -15,7 +15,7 @@ use App\Services\MikroTikService;
 class BanScheduledDeletionUsers extends Command
 {
     protected $signature = 'users:ban-scheduled';
-    protected $description = 'Ban users whose scheduled deletion time has passed by adding them to the MikroTik banned users list';
+    protected $description = 'Ban users whose scheduled deletion time has passed by adding them to the MikroTik banned users list and disabling them in database';
 
     // MikroTik connection details from config
     protected $mikrotikConfig = [];
@@ -50,8 +50,8 @@ class BanScheduledDeletionUsers extends Command
                              ->where('scheduled_deletion_at', '<', Carbon::now())
                              ->get();
 
-        $this->info('Found ' . $expiredUsers->count() . ' users scheduled for deletion/banning.');
-        Log::info('Found ' . $expiredUsers->count() . ' users scheduled for deletion/banning.');
+        $this->info('Found ' . $expiredUsers->count() . ' users scheduled for disabling/banning.');
+        Log::info('Found ' . $expiredUsers->count() . ' users scheduled for disabling/banning.');
         
         if ($expiredUsers->count() === 0) {
             return Command::SUCCESS;
@@ -114,16 +114,16 @@ class BanScheduledDeletionUsers extends Command
                 $this->banUser($mikrotikClient, $user->mac_address);
                 
                 // Update user status in database
-                $user->status = 'banned';
+                $user->status = 'disabled';
                 $user->save();
                 
                 $this->stats['banned']++;
-                $this->info('Successfully banned user: ' . $user->email . ' (MAC: ' . $user->mac_address . ')');
-                Log::info('Successfully banned user: ' . $user->email . ' (MAC: ' . $user->mac_address . ')');
+                $this->info('Successfully banned and disabled user: ' . $user->email . ' (MAC: ' . $user->mac_address . ')');
+                Log::info('Successfully banned and disabled user: ' . $user->email . ' (MAC: ' . $user->mac_address . ')');
             } catch (\Exception $e) {
                 $this->stats['errors']++;
-                $this->error('Failed to ban user ' . $user->email . ': ' . $e->getMessage());
-                Log::error('Failed to ban user ' . $user->email . ': ' . $e->getMessage(), [
+                $this->error('Failed to ban/disable user ' . $user->email . ': ' . $e->getMessage());
+                Log::error('Failed to ban/disable user ' . $user->email . ': ' . $e->getMessage(), [
                     'user_id' => $user->id,
                     'mac_address' => $user->mac_address,
                     'error' => $e->getMessage()

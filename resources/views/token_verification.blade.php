@@ -130,107 +130,131 @@
         color: #c62828;
         border-left: 4px solid #c62828;
     }
+
+    .alert-success {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+        border-left: 4px solid #2e7d32;
+    }
 </style>
 @endsection
 
 @section('content')
-<div class="verification-container">
-    <h2 class="verification-title">
-        @if(isset($token_registration))
-            {{ __('Enter Your WiFi Access Code') }}
-        @else
-            {{ __('Verify Your Email') }}
-        @endif
-    </h2>
-    
-    @if (session('error'))
-        <div class="alert alert-danger">
-            {{ session('error') }}
-        </div>
-    @endif
-
-    @if ($errors->has('token'))
-        <div class="alert alert-danger">
-            {{ $errors->first('token') }}
-        </div>
-    @endif
-
-    <p class="verification-subtitle">
-        @if(isset($token_registration))
-            @if(isset($full_name))
-                {{ __('Hi') }} {{ $full_name }}! {{ __('Please enter the 6-digit access code you received to get WiFi access.') }}
-            @else
-                {{ __('Please enter the 6-digit access code you received to get WiFi access.') }}
-            @endif
-        @else
-            {{ __('Please enter the 6-digit verification code sent to your email. This code is valid for 15 minutes.') }}
-        @endif
-    </p>
-
-    @if(isset($attempts_remaining))
-    <div class="attempts-info" style="text-align: center; margin-bottom: 1rem; color: #666;">
-        <p>{{ __('You have') }} <strong>{{ $attempts_remaining }}</strong> {{ __('attempts remaining') }}</p>
-    </div>
-    @endif
-
-    @if(isset($client) && isset($client->successful_verifications))
-    <div class="successful-verifications" style="text-align: center; margin-bottom: 1rem; background-color: #e8f5e9; padding: 10px; border-radius: 8px; color: #2e7d32;">
-        <p>{{ __('This token has been used on') }} <strong>{{ $client->successful_verifications }}</strong> {{ __('device(s)') }}</p>
-        <p>{{ __('You can still use it on') }} <strong>{{ 5 - $client->successful_verifications }}</strong> {{ __('more device(s)') }}</p>
-    </div>
-    @endif
-
-    <form method="POST" action="{{ route('verify.token') }}" id="verificationForm">
-        @csrf
-        
-        <div class="code-input-group">
-            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="one-time-code" required>
-            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-            <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-        </div>
-        
-        <input type="hidden" id="token" name="token" value="{{ old('token') }}">
-        
-        <button type="submit" class="btn-verify">
-            {{ __('Verify Code') }}
-        </button>
-        
-        <a href="{{ url('/wifi') }}" class="btn-link">
+<div class="container mt-5">
+    <div class="verification-container">
+        <h1 class="verification-title">
             @if(isset($token_registration))
-                {{ __('Need to register with email instead?') }}
+                {{ __('Enter Your WiFi Access Code') }}
             @else
-                {{ __('Need a new code?') }}
+                {{ __('Verify Your Email') }}
             @endif
-        </a>
-    </form>
-
-    @if(session('mac_address'))
-    <div class="free-access-section">
-        <h4 class="free-access-title">{{ __('Get 5-minute free access while waiting for your code') }}</h4>
+        </h1>
         
-        <p>{{ __('Your device MAC address:') }} <span class="mac-address">{{ session('mac_address') }}</span></p>
+        @if(session('status'))
+            <div class="alert alert-success">
+                {{ session('status') }}
+            </div>
+        @endif
         
-        <p>{{ __('To connect to WiFi:') }}</p>
-        <ol>
-            <li>{{ __('Connect to the WiFi network') }}</li>
-            <li>{{ __('When the login page appears, enter:') }}
+        @if ($errors->any())
+            <div class="alert alert-danger">
                 <ul>
-                    <li>{{ __('Username:') }} <strong>{{ session('mac_address') }}</strong></li>
-                    <li>{{ __('Password:') }} <strong>123456789</strong></li>
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
                 </ul>
-            </li>
-        </ol>
-        
-        @if(session('login_url'))
-            <a href="{{ session('login_url') }}" class="connect-btn">
-                {{ __('Connect to WiFi (5 minutes)') }}
+            </div>
+        @endif
+
+        @if (session('error'))
+            <div class="alert alert-danger">
+                {{ session('error') }}
+            </div>
+        @endif
+
+        @if ($errors->has('token'))
+            <div class="alert alert-danger">
+                {{ $errors->first('token') }}
+            </div>
+        @endif
+
+        <p class="verification-subtitle">
+            @if(isset($token_registration))
+                @if(isset($full_name))
+                    {{ __('Hi') }} {{ $full_name }}! {{ __('Please enter the 6-digit access code you received to get WiFi access.') }}
+                @else
+                    {{ __('Please enter the 6-digit access code you received to get WiFi access.') }}
+                @endif
+            @else
+                {{ __('Please enter the 6-digit verification code sent to your email. This code is valid for 15 minutes.') }}
+            @endif
+        </p>
+
+        @if(isset($attempts_remaining))
+        <div class="attempts-info" style="text-align: center; margin-bottom: 1rem; color: #666;">
+            <p>{{ __('You have') }} <strong>{{ $attempts_remaining }}</strong> {{ __('attempts remaining') }}</p>
+        </div>
+        @endif
+
+        @if(isset($client) && isset($client->successful_verifications))
+        <div class="successful-verifications" style="text-align: center; margin-bottom: 1rem; background-color: #e8f5e9; padding: 10px; border-radius: 8px; color: #2e7d32;">
+            <p>{{ __('This token has been used on') }} <strong>{{ $client->successful_verifications }}</strong> {{ __('device(s)') }}</p>
+            <p>{{ __('You can still use it on') }} <strong>{{ 5 - $client->successful_verifications }}</strong> {{ __('more device(s)') }}</p>
+        </div>
+        @endif
+
+        <form method="POST" action="{{ route('verify.token') }}" id="verificationForm">
+            @csrf
+            
+            <div class="code-input-group">
+                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" autocomplete="one-time-code" required>
+                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                <input type="text" class="code-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+            </div>
+            
+            <input type="hidden" id="token" name="token" value="{{ old('token') }}">
+            
+            <button type="submit" class="btn-verify">
+                {{ __('Verify Code') }}
+            </button>
+            
+            <a href="{{ url('/wifi') }}" class="btn-link">
+                @if(isset($token_registration))
+                    {{ __('Need to register with email instead?') }}
+                @else
+                    {{ __('Need a new code?') }}
+                @endif
             </a>
+        </form>
+
+        @if(session('mac_address'))
+        <div class="free-access-section">
+            <h4 class="free-access-title">{{ __('Get 5-minute free access while waiting for your code') }}</h4>
+            
+            <p>{{ __('Your device MAC address:') }} <span class="mac-address">{{ session('mac_address') }}</span></p>
+            
+            <p>{{ __('To connect to WiFi:') }}</p>
+            <ol>
+                <li>{{ __('Connect to the WiFi network') }}</li>
+                <li>{{ __('When the login page appears, enter:') }}
+                    <ul>
+                        <li>{{ __('Username:') }} <strong>{{ session('mac_address') }}</strong></li>
+                        <li>{{ __('Password:') }} <strong>123456789</strong></li>
+                    </ul>
+                </li>
+            </ol>
+            
+            @if(session('login_url'))
+                <a href="{{ session('login_url') }}" class="connect-btn">
+                    {{ __('Connect to WiFi (5 minutes)') }}
+                </a>
+            @endif
+        </div>
         @endif
     </div>
-    @endif
 </div>
 @endsection
 

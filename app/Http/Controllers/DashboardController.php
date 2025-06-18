@@ -420,13 +420,13 @@ class DashboardController extends Controller
             
             return response()->json([
                 'success' => true,
-                'message' => 'Command executed successfully',
+                'message' => 'Users have been removed from router and disabled in database',
                 'details' => $output
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error executing command: ' . $e->getMessage()
+                'message' => 'Error processing users: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -445,7 +445,7 @@ class DashboardController extends Controller
         $client->scheduled_deletion_at = now()->addMinute();
         $client->save();
         
-        return redirect()->back()->with('success', 'User scheduled for deletion in 1 minute');
+        return redirect()->back()->with('success', 'User scheduled for removal from router and disabling in 1 minute');
     }
 
     /**
