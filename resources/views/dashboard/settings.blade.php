@@ -33,6 +33,80 @@
                         <h3>Email Settings</h3>
                         <p>Customize the content of email verification messages sent to users.</p>
                         
+                        <!-- Logo Upload Section -->
+                        <div class="setting-item email-setting lang-visible" style="grid-column: span 2; margin-bottom: 20px;">
+                            <label for="email_logo">Email Logo</label>
+                            <div class="logo-upload-container">
+                                <div class="current-logo">
+                                    @if(isset($logo_url) && !empty($logo_url))
+                                        <img src="{{ $logo_url }}" alt="Email Logo" id="currentLogoImage" class="logo-preview">
+                                    @else
+                                        <div class="logo-placeholder" id="logoPlaceholder">
+                                            <i class="uil uil-image"></i>
+                                            <span>No logo uploaded</span>
+                                        </div>
+                                    @endif
+                                </div>
+                                <div class="logo-actions">
+                                    <label for="logo_upload" class="logo-upload-btn">
+                                        <i class="uil uil-upload"></i> Upload Logo
+                                        <input type="file" id="logo_upload" class="hidden-upload" accept="image/*" onchange="handleLogoUpload(this)">
+                                    </label>
+                                    <button type="button" class="logo-remove-btn" onclick="removeLogo()" @if(!isset($logo_url) || empty($logo_url)) disabled @endif>
+                                        <i class="uil uil-trash-alt"></i> Remove
+                                    </button>
+                                </div>
+                                <p class="logo-hint">Recommended size: 200x200px, PNG or JPG format</p>
+                                <input type="hidden" id="email_logo_url" name="email_logo_url" value="{{ $logo_url ?? '' }}">
+                            </div>
+                        </div>
+                        
+                        <!-- Quick Email Test Section -->
+                        <div class="setting-item email-setting lang-visible" style="grid-column: span 2; margin-bottom: 20px;">
+                            <label>Quick Email Test</label>
+                            <div class="direct-test-buttons" style="background-color: #f9fafb; border-radius: 8px; padding: 15px; border: 1px solid #e5e7eb;">
+                                <p style="margin-bottom: 15px; color: #6B7280;">Test email functionality without page refresh. Results will appear below.</p>
+                                
+                                <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+                                    <div class="input-group" style="flex: 1; min-width: 250px;">
+                                        <label for="testEmailAddress" style="display: block; margin-bottom: 5px; font-weight: 500; color: #374151;">Test Email Address</label>
+                                        <input type="email" id="testEmailAddress" value="boussettahsallah@gmail.com" placeholder="Enter email address" style="width: 100%; padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 6px;">
+                                    </div>
+                                    <div class="input-group" style="flex: 0 0 150px;">
+                                        <label for="testEmailLanguage" style="display: block; margin-bottom: 5px; font-weight: 500; color: #374151;">Language</label>
+                                        <select id="testEmailLanguage" style="width: 100%; padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 6px; background-color: white;">
+                                            <option value="en">English</option>
+                                            <option value="fr">French</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                    <button type="button" onclick="sendDirectVerificationEmail()" class="direct-test-button verification" style="padding: 8px 16px; background: linear-gradient(135deg, #3B82F6, #2563EB); color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                        <i class="uil uil-envelope-check"></i> Send Verification Email
+                                    </button>
+                                    <button type="button" onclick="sendDirectFeedbackEmail()" class="direct-test-button feedback" style="padding: 8px 16px; background: linear-gradient(135deg, #10B981, #059669); color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                                        <i class="uil uil-comment-alt-message"></i> Send Feedback Email
+                                    </button>
+                                </div>
+                                
+                                <div id="emailTestResult" style="margin-top: 15px; padding: 10px; border-radius: 6px; display: none;"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Email Type Toggle -->
+                        <div class="email-type-toggle">
+                            <span class="email-type-label">Email Type:</span>
+                            <div class="toggle-buttons">
+                                <button type="button" class="email-type-btn active" data-type="verification" onclick="toggleEmailType('verification')">
+                                    <i class="uil uil-envelope-check"></i> Verification Email
+                                </button>
+                                <button type="button" class="email-type-btn" data-type="feedback" onclick="toggleEmailType('feedback')">
+                                    <i class="uil uil-comment-alt-message"></i> Feedback Email
+                                </button>
+                            </div>
+                        </div>
+                        
                         <div class="preview-actions">
                             <div class="preview-buttons">
                                 <div class="dropdown preview-dropdown">
@@ -40,49 +114,34 @@
                                         <i class="uil uil-eye"></i> Preview Email
                                     </button>
                                     <div class="preview-options" id="previewOptions">
-                                        <a href="#" onclick="showEmailPreview('en'); return false;">
+                                        <a href="#" onclick="previewEmail('en'); return false;">
                                             <i class="uil uil-language"></i> English
                                         </a>
-                                        <a href="#" onclick="showEmailPreview('fr'); return false;">
+                                        <a href="#" onclick="previewEmail('fr'); return false;">
                                             <i class="uil uil-language"></i> French
                                         </a>
                                     </div>
                                 </div>
-                                <div class="dropdown test-email-dropdown">
-                                    <button type="button" class="test-email-button" onclick="toggleTestEmailOptions()">
-                                        <i class="uil uil-envelope-send"></i> Send Test Email
+                                
+                                <div class="dropdown language-dropdown">
+                                    <button type="button" id="languageButton" class="language-main-button">
+                                        <i class="uil uil-language"></i> <span id="currentLanguage">English</span>
                                     </button>
-                                    <div class="test-email-options" id="testEmailOptions">
-                                        <a href="{{ route('admin.settings.send-test-email', ['email' => 'boussettahsallah@gmail.com', 'lang' => 'en']) }}" 
-                                           onclick="return confirm('Send an English test email to boussettahsallah@gmail.com?')">
+                                    <div class="language-options" id="languageOptions">
+                                        <a href="#" class="language-option en active" data-language="en" onclick="toggleEmailLanguage('en'); return false;">
                                             <i class="uil uil-language"></i> English
                                         </a>
-                                        <a href="{{ route('admin.settings.send-test-email', ['email' => 'boussettahsallah@gmail.com', 'lang' => 'fr']) }}" 
-                                           onclick="return confirm('Send a French test email to boussettahsallah@gmail.com?')">
+                                        <a href="#" class="language-option fr" data-language="fr" onclick="toggleEmailLanguage('fr'); return false;">
                                             <i class="uil uil-language"></i> French
+                                        </a>
+                                        <a href="#" class="language-option general" data-language="general" onclick="toggleEmailLanguage('general'); return false;">
+                                            <i class="uil uil-setting"></i> General
                                         </a>
                                     </div>
                                 </div>
                             </div>
                             <div class="premium-badge">
                                 <i class="uil uil-star"></i> Premium Access: <span id="premiumDurationDisplay">7</span> days
-                            </div>
-                        </div>
-                        
-                        <div class="dropdown language-dropdown">
-                            <button type="button" id="languageButton" class="language-main-button">
-                                <i class="uil uil-language"></i> <span id="currentLanguage">English</span>
-                            </button>
-                            <div class="language-options" id="languageOptions">
-                                <a href="#" class="language-option en active" data-language="en" onclick="toggleEmailLanguage('en'); return false;">
-                                    <i class="uil uil-language"></i> English
-                                </a>
-                                <a href="#" class="language-option fr" data-language="fr" onclick="toggleEmailLanguage('fr'); return false;">
-                                    <i class="uil uil-language"></i> French
-                                </a>
-                                <a href="#" class="language-option general" data-language="general" onclick="toggleEmailLanguage('general'); return false;">
-                                    <i class="uil uil-setting"></i> General
-                                </a>
                             </div>
                         </div>
                     </div>
@@ -99,6 +158,11 @@
                                     lang-fr
                                 @else
                                     lang-general
+                                @endif
+                                @if(str_contains($setting->key, '_verification_'))
+                                    email-type-verification
+                                @elseif(str_contains($setting->key, '_feedback_'))
+                                    email-type-feedback
                                 @endif
                             @endif">
                             
@@ -323,6 +387,31 @@
     
     .preview-options.show {
         display: block;
+    }
+    
+    /* Adjust language dropdown inside preview-buttons */
+    .preview-buttons .language-dropdown {
+        margin-left: 10px;
+    }
+    
+    .preview-buttons .language-main-button {
+        height: 100%;
+        padding: 0.6rem 1.2rem;
+        border-radius: 8px;
+    }
+    
+    .language-main-button {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(135deg, #10B981, #059669);
+        color: white;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        transition: all 0.2s;
     }
     
     .test-email-button {
@@ -625,6 +714,292 @@
     .language-option.general i {
         color: #F59E0B;
     }
+    
+    /* Logo upload styling */
+    .logo-upload-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-top: 10px; 
+        max-width: 600px;
+    }
+    
+    .current-logo {
+        width: 200px;
+        height: 200px;
+        border: 2px dashed #E5E7EB;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        background-color: #F9FAFB;
+        margin-bottom: 10px;
+    }
+    
+    .logo-preview {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    
+    .logo-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #9CA3AF;
+        gap: 0.5rem;
+        width: 100%;
+        height: 100%;
+    }
+    
+    .logo-placeholder i {
+        font-size: 2.5rem;
+    }
+    
+    .logo-actions {
+        display: flex;
+        gap: 1rem;
+    }
+    
+    .logo-upload-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1.2rem;
+        background: linear-gradient(135deg, #3B82F6, #2563EB);
+        color: white;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+    }
+    
+    .logo-remove-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1.2rem;
+        background: linear-gradient(135deg, #EF4444, #B91C1C);
+        color: white;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+    }
+    
+    .logo-remove-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .logo-upload-btn:hover, .logo-remove-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .hidden-upload {
+        display: none;
+    }
+    
+    .logo-hint {
+        font-size: 0.85rem;
+        color: #6B7280;
+        margin-top: 0.5rem;
+    }
+    
+    /* Always show elements with lang-visible class */
+    .lang-visible {
+        display: block !important;
+    }
+    
+    /* Logo loading styling */
+    .logo-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #6B7280;
+        gap: 0.5rem;
+        width: 100%;
+        height: 100%;
+    }
+    
+    .logo-loading i {
+        font-size: 2rem;
+        color: #3B82F6;
+    }
+    
+    .logo-loading span {
+        font-size: 0.9rem;
+    }
+
+    /* Email Type Toggle Styles */
+    .email-type-toggle {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        padding: 0 15px;
+    }
+    
+    .email-type-label {
+        font-weight: 600;
+        margin-right: 15px;
+        color: #344767;
+    }
+    
+    .toggle-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .email-type-btn {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 8px 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .email-type-btn i {
+        font-size: 16px;
+    }
+    
+    .email-type-btn.active {
+        background-color: #4E73F8;
+        color: white;
+        border-color: #4E73F8;
+    }
+    
+    /* Email Preview Container Styles */
+    .email-preview-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1050;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+    
+    .email-preview-container.visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    
+    .preview-header {
+        background-color: #fff;
+        width: 80%;
+        max-width: 800px;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #e5e5e5;
+    }
+    
+    .preview-title {
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    .preview-language-indicator {
+        font-size: 12px;
+        padding: 5px 10px;
+        border-radius: 4px;
+        background-color: #f0f0f0;
+        color: #666;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    
+    .preview-language-indicator:hover {
+        background-color: #e0e0e0;
+        transform: translateY(-1px);
+    }
+    
+    .preview-language-indicator.active {
+        background-color: #4E73F8;
+        color: white;
+        box-shadow: 0 2px 4px rgba(78, 115, 248, 0.3);
+    }
+    
+    .close-preview {
+        background: none;
+        border: none;
+        font-size: 22px;
+        cursor: pointer;
+        color: #777;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+    
+    .close-preview:hover {
+        background-color: #f0f0f0;
+    }
+    
+    .preview-content {
+        background-color: #fff;
+        width: 80%;
+        max-width: 800px;
+        height: 70%;
+        border-bottom-left-radius: 8px;
+        border-bottom-right-radius: 8px;
+        overflow: hidden;
+    }
+    
+    .loader {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #4E73F8;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        margin: 0 auto 15px;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* Email Type Settings Display */
+    .email-type-verification, .email-type-feedback {
+        display: none; /* Hidden by default, shown via JS */
+    }
+    
+    /* Always show elements with lang-visible class */
+    .lang-visible {
+        display: block !important;
+    }
 </style>
 
 <script>
@@ -682,6 +1057,9 @@
         
         // Initialize with English language selected by default
         toggleEmailLanguage('en');
+        
+        // Initialize with verification email type selected by default
+        toggleEmailType('verification');
     });
     
     // Tab navigation
@@ -729,14 +1107,18 @@
         }
         document.getElementById('currentLanguage').textContent = languageText;
         
-        // Hide all email settings first
-        document.querySelectorAll('.email-setting').forEach(function(el) {
+        // Hide all email settings first, except those with lang-visible class
+        document.querySelectorAll('.email-setting:not(.lang-visible)').forEach(function(el) {
             el.style.display = 'none';
         });
         
         // Show settings based on selected language
         document.querySelectorAll('.lang-' + language).forEach(function(el) {
-            el.style.display = 'block';
+            if ((currentEmailType === 'verification' && el.classList.contains('email-type-verification')) || 
+                (currentEmailType === 'feedback' && el.classList.contains('email-type-feedback')) || 
+                (!el.classList.contains('email-type-verification') && !el.classList.contains('email-type-feedback'))) {
+                el.style.display = 'block';
+            }
         });
         
         // Hide the dropdown after selection
@@ -747,75 +1129,160 @@
         document.getElementById('premiumDurationDisplay').textContent = value;
     }
     
-    function showEmailPreview(language) {
-        let emailContent = '';
-        const buttonColor = document.getElementById('secondary_color')?.value || '#4CAF50';
-        const sampleToken = '123456';
+    // Global variable to track current email type
+    let currentEmailType = 'verification';
+    
+    // Function to toggle between email types
+    function toggleEmailType(type) {
+        currentEmailType = type;
         
-        if (language === 'en') {
-            const heading = document.getElementById('email_verification_heading_en')?.value || 'Your WiFi Verification Code';
-            const greeting = document.getElementById('email_verification_greeting_en')?.value || 'Hello,';
-            const intro = document.getElementById('email_verification_intro_en')?.value || 'Thank you for using our WiFi service.';
-            const expiry = document.getElementById('email_verification_expiry_text_en')?.value || 'This code is valid for 15 minutes.';
-            const buttonIntro = document.getElementById('email_verification_button_intro_en')?.value || 'Click the button below:';
-            const buttonText = document.getElementById('email_verification_button_text_en')?.value || 'Verify My Code';
-            const footer = document.getElementById('email_verification_footer_en')?.value || 'If you didn\'t request this code, please ignore this email.';
-            
-            emailContent = generateEmailHTML(heading, greeting, intro, sampleToken, expiry, buttonIntro, buttonText, footer, buttonColor);
+        // Update button styles
+        const buttons = document.querySelectorAll('.email-type-btn');
+        buttons.forEach(btn => {
+            if (btn.dataset.type === type) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        // Show verification email settings and hide feedback email settings or vice versa
+        if (type === 'verification') {
+            // Show verification email settings and hide feedback email settings
+            document.querySelectorAll('.email-type-verification').forEach(el => {
+                el.style.display = 'block';
+            });
+            document.querySelectorAll('.email-type-feedback').forEach(el => {
+                el.style.display = 'none';
+            });
         } else {
-            const heading = document.getElementById('email_verification_heading_fr')?.value || 'Votre code de vérification WiFi';
-            const greeting = document.getElementById('email_verification_greeting_fr')?.value || 'Bonjour,';
-            const intro = document.getElementById('email_verification_intro_fr')?.value || 'Merci d\'avoir utilisé notre service WiFi.';
-            const expiry = document.getElementById('email_verification_expiry_text_fr')?.value || 'Ce code est valable pendant 15 minutes.';
-            const buttonIntro = document.getElementById('email_verification_button_intro_fr')?.value || 'Cliquez sur le bouton ci-dessous:';
-            const buttonText = document.getElementById('email_verification_button_text_fr')?.value || 'Vérifier mon code';
-            const footer = document.getElementById('email_verification_footer_fr')?.value || 'Si vous n\'avez pas demandé ce code, veuillez ignorer cet email.';
-            
-            emailContent = generateEmailHTML(heading, greeting, intro, sampleToken, expiry, buttonIntro, buttonText, footer, buttonColor);
+            // Show feedback email settings and hide verification email settings
+            document.querySelectorAll('.email-type-verification').forEach(el => {
+                el.style.display = 'none';
+            });
+            document.querySelectorAll('.email-type-feedback').forEach(el => {
+                el.style.display = 'block';
+            });
         }
         
-        document.getElementById('emailPreviewContent').innerHTML = emailContent;
+        // If email preview is open, refresh it with the new type
+        const previewContainer = document.getElementById('emailPreview');
+        if (previewContainer && previewContainer.style.display === 'block') {
+            const selectedLang = document.querySelector('.preview-language.active').dataset.lang;
+            previewEmail(selectedLang);
+        }
+    }
+    
+    // Update the previewEmail function to include email type with the correct parameter name
+    function previewEmail(lang) {
+        const previewContainer = document.getElementById('emailPreview');
+        const logoUrl = document.getElementById('email_logo_url').value;
         
-        // Show the modal
-        const emailPreviewModal = new bootstrap.Modal(document.getElementById('emailPreviewModal'));
-        emailPreviewModal.show();
+        if (!previewContainer) {
+            // Create preview container if it doesn't exist
+            const container = document.createElement('div');
+            container.id = 'emailPreview';
+            container.className = 'email-preview-container';
+            container.innerHTML = `
+                <div class="preview-header">
+                    <div class="preview-title">
+                        Email Preview
+                        <span class="preview-language-indicator ${lang === 'en' ? 'active' : ''}" data-lang="en" onclick="switchPreviewLanguage('en')">EN</span>
+                        <span class="preview-language-indicator ${lang === 'fr' ? 'active' : ''}" data-lang="fr" onclick="switchPreviewLanguage('fr')">FR</span>
+                    </div>
+                    <button type="button" class="close-preview" onclick="closePreview()">
+                        <i class="uil uil-times"></i>
+                    </button>
+                </div>
+                <div class="preview-content">
+                    <iframe id="previewFrame" style="width:100%; height:100%; border:none;"></iframe>
+                </div>
+            `;
+            document.body.appendChild(container);
+            setTimeout(() => container.classList.add('visible'), 10);
+        } else {
+            // Update existing preview container - ensure correct positioning
+            previewContainer.style.display = 'flex'; // Use flex instead of block
+            previewContainer.style.alignItems = 'center';
+            previewContainer.style.justifyContent = 'center';
+            setTimeout(() => previewContainer.classList.add('visible'), 10);
+            
+            const languageIndicators = previewContainer.querySelectorAll('.preview-language-indicator');
+            languageIndicators.forEach(indicator => {
+                if (indicator.dataset.lang === lang) {
+                    indicator.classList.add('active');
+                } else {
+                    indicator.classList.remove('active');
+                }
+            });
+        }
+        
+        // Show loading spinner
+        const frame = document.getElementById('previewFrame');
+        frame.srcdoc = '<div style="display:flex; justify-content:center; align-items:center; height:100%; font-family:Arial, sans-serif;"><div style="text-align:center;"><div class="loader"></div><p>Loading preview...</p></div></div>';
+        
+        // Make AJAX request to get email preview
+        fetch(`/settings/preview-email?language=${lang}&email_type=${currentEmailType}&logo_url=${encodeURIComponent(logoUrl)}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.html) {
+                frame.srcdoc = data.html;
+            } else {
+                const errorMessage = data.message || 'Error loading preview';
+                console.error('Preview error:', errorMessage);
+                frame.srcdoc = `
+                    <div style="padding:20px; color:#e53e3e; font-family:Arial, sans-serif;">
+                        <h3 style="margin-bottom:15px;">Error loading preview</h3>
+                        <p style="margin-bottom:10px;">There was a problem loading the email preview:</p>
+                        <div style="background-color:#fef2f2; border-left:4px solid #e53e3e; padding:10px; margin-bottom:15px;">
+                            ${errorMessage}
+                        </div>
+                        <p><strong>Email Type:</strong> ${currentEmailType}</p>
+                        <p><strong>Language:</strong> ${lang}</p>
+                        <p style="margin-top:15px;">Check browser console for more details.</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching preview:', error);
+            frame.srcdoc = `
+                <div style="padding:20px; color:#e53e3e; font-family:Arial, sans-serif;">
+                    <h3 style="margin-bottom:15px;">Error loading preview</h3>
+                    <p style="margin-bottom:10px;">There was a network error when trying to load the email preview:</p>
+                    <div style="background-color:#fef2f2; border-left:4px solid #e53e3e; padding:10px; margin-bottom:15px;">
+                        ${error.message || 'Network error'}
+                    </div>
+                    <p><strong>Email Type:</strong> ${currentEmailType}</p>
+                    <p><strong>Language:</strong> ${lang}</p>
+                    <p style="margin-top:15px;">Please check that the server is running and try again.</p>
+                </div>
+            `;
+        });
     }
     
-    function generateEmailHTML(heading, greeting, intro, token, expiry, buttonIntro, buttonText, footer, buttonColor) {
-        return `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
-                <div style="text-align: center; padding: 10px; background-color: #f8f9fa; border-radius: 5px; margin-bottom: 20px;">
-                    <h2>${heading}</h2>
-                </div>
-                
-                <p>${greeting}</p>
-                
-                <p>${intro}</p>
-                
-                <div style="font-size: 24px; font-weight: bold; text-align: center; padding: 15px; background-color: #f0f0f0; border-radius: 5px; margin: 20px 0; letter-spacing: 5px;">
-                    ${token}
-                </div>
-                
-                <p>${expiry}</p>
-                
-                <div style="text-align: center; margin: 20px 0;">
-                    <p>${buttonIntro}</p>
-                    <a href="#" style="display: inline-block; padding: 10px 20px; background-color: ${buttonColor}; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                        ${buttonText}
-                    </a>
-                </div>
-                
-                <p>${footer}</p>
-                
-                <div style="margin-top: 30px; font-size: 12px; color: #777; text-align: center;">
-                    <p>&copy; ${new Date().getFullYear()} Eureka Digital. All rights reserved.</p>
-                </div>
-            </div>
-        `;
-    }
-    
-    function toggleTestEmailOptions() {
-        document.getElementById('testEmailOptions').classList.toggle('show');
+    // Function to switch languages in the preview modal
+    function switchPreviewLanguage(lang) {
+        const languageIndicators = document.querySelectorAll('.preview-language-indicator');
+        
+        // Update active state on language indicators
+        languageIndicators.forEach(indicator => {
+            if (indicator.dataset.lang === lang) {
+                indicator.classList.add('active');
+            } else {
+                indicator.classList.remove('active');
+            }
+        });
+        
+        // Load the preview in the selected language
+        previewEmail(lang);
     }
     
     function togglePreviewOptions() {
@@ -825,7 +1292,6 @@
     function toggleLanguageOptions() {
         // Close any other open dropdowns first
         document.getElementById('previewOptions')?.classList.remove('show');
-        document.getElementById('testEmailOptions')?.classList.remove('show');
         
         // Toggle the language options dropdown
         const languageOptions = document.getElementById('languageOptions');
@@ -846,15 +1312,6 @@
             }
         }
         
-        // Test Email dropdown
-        if (!event.target.matches('.test-email-button') && 
-            !event.target.closest('.test-email-button')) {
-            var testEmailDropdown = document.getElementById('testEmailOptions');
-            if (testEmailDropdown && testEmailDropdown.classList.contains('show')) {
-                testEmailDropdown.classList.remove('show');
-            }
-        }
-        
         // Preview dropdown
         if (!event.target.matches('.preview-button') && 
             !event.target.closest('.preview-button')) {
@@ -864,5 +1321,286 @@
             }
         }
     });
+    
+    // Logo upload handling
+    function handleLogoUpload(input) {
+        if (input.files && input.files[0]) {
+            // Create a FormData object to send the file
+            const formData = new FormData();
+            formData.append('logo', input.files[0]);
+            formData.append('_token', '{{ csrf_token() }}');
+            
+            // Show loading indicator
+            const logoContainer = document.querySelector('.current-logo');
+            logoContainer.innerHTML = `
+                <div class="logo-loading">
+                    <i class="uil uil-spinner fa-spin"></i>
+                    <span>Uploading...</span>
+                </div>
+            `;
+            
+            // Upload the file using AJAX
+            fetch('{{ route('admin.settings.upload-logo') }}', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update the logo preview with the new URL
+                    logoContainer.innerHTML = `
+                        <img src="${data.url}" alt="Email Logo" id="currentLogoImage" class="logo-preview">
+                    `;
+                    
+                    // Update hidden input with logo URL
+                    document.getElementById('email_logo_url').value = data.url;
+                    
+                    // Enable remove button
+                    const removeBtn = document.querySelector('.logo-remove-btn');
+                    if (removeBtn) {
+                        removeBtn.disabled = false;
+                    }
+                    
+                    // If email preview is already open, refresh it with the new logo
+                    refreshEmailPreviewIfOpen();
+                } else {
+                    // Show error message
+                    alert('Error uploading logo: ' + data.message);
+                    
+                    // Reset to placeholder
+                    logoContainer.innerHTML = `
+                        <div class="logo-placeholder" id="logoPlaceholder">
+                            <i class="uil uil-image"></i>
+                            <span>No logo uploaded</span>
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading logo:', error);
+                alert('Error uploading logo. Please try again.');
+                
+                // Reset to placeholder on error
+                logoContainer.innerHTML = `
+                    <div class="logo-placeholder" id="logoPlaceholder">
+                        <i class="uil uil-image"></i>
+                        <span>No logo uploaded</span>
+                    </div>
+                `;
+            });
+        }
+    }
+    
+    function removeLogo() {
+        // Show loading indicator
+        const logoContainer = document.querySelector('.current-logo');
+        logoContainer.innerHTML = `
+            <div class="logo-loading">
+                <i class="uil uil-spinner fa-spin"></i>
+                <span>Removing...</span>
+            </div>
+        `;
+        
+        // Send delete request to remove the logo
+        fetch('{{ route('admin.settings.remove-logo') }}', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Clear logo display
+                logoContainer.innerHTML = `
+                    <div class="logo-placeholder" id="logoPlaceholder">
+                        <i class="uil uil-image"></i>
+                        <span>No logo uploaded</span>
+                    </div>
+                `;
+                
+                // Clear hidden input
+                document.getElementById('email_logo_url').value = '';
+                
+                // Disable remove button
+                const removeBtn = document.querySelector('.logo-remove-btn');
+                if (removeBtn) {
+                    removeBtn.disabled = true;
+                }
+                
+                // If email preview is already open, refresh it without the logo
+                refreshEmailPreviewIfOpen();
+            } else {
+                alert('Error removing logo: ' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error removing logo:', error);
+            alert('Error removing logo. Please try again.');
+            
+            // Reset the container to show the previous logo if there was one
+            const previousLogo = document.getElementById('email_logo_url').value;
+            if (previousLogo) {
+                logoContainer.innerHTML = `
+                    <img src="${previousLogo}" alt="Email Logo" id="currentLogoImage" class="logo-preview">
+                `;
+            } else {
+                logoContainer.innerHTML = `
+                    <div class="logo-placeholder" id="logoPlaceholder">
+                        <i class="uil uil-image"></i>
+                        <span>No logo uploaded</span>
+                    </div>
+                `;
+            }
+        });
+    }
+    
+    function refreshEmailPreviewIfOpen() {
+        // Check if email preview is open
+        const emailPreviewContent = document.getElementById('emailPreviewContent');
+        if (emailPreviewContent && emailPreviewContent.innerHTML.trim() !== '') {
+            // Get the current language tab
+            const activeLanguageOption = document.querySelector('.language-option.active');
+            const language = activeLanguageOption ? activeLanguageOption.getAttribute('data-language') : 'en';
+            
+            // Refresh preview with updated logo
+            if (language === 'en' || language === 'fr') {
+                previewEmail(language);
+            }
+        }
+    }
+
+    // Function to close the email preview
+    function closePreview() {
+        const previewContainer = document.getElementById('emailPreview');
+        if (previewContainer) {
+            previewContainer.classList.remove('visible');
+            setTimeout(() => {
+                // Don't remove the container - this allows us to keep the state
+                // when reopening the preview
+                previewContainer.style.display = 'none';
+                
+                // Make sure to preserve the flex layout for next time
+                previewContainer.style.alignItems = 'center';
+                previewContainer.style.justifyContent = 'center';
+            }, 300);
+        }
+    }
+
+    // Close preview when clicking outside of it
+    document.addEventListener('click', function(event) {
+        const previewContainer = document.getElementById('emailPreview');
+        if (previewContainer && event.target === previewContainer) {
+            closePreview();
+        }
+    });
+
+    function sendDirectVerificationEmail() {
+        const email = document.getElementById('testEmailAddress').value;
+        const language = document.getElementById('testEmailLanguage').value;
+        const resultDiv = document.getElementById('emailTestResult');
+        
+        if (!email) {
+            showTestResult('error', 'Please enter an email address');
+            return;
+        }
+        
+        // Show loading state
+        document.querySelector('.direct-test-button.verification').disabled = true;
+        document.querySelector('.direct-test-button.verification').innerHTML = '<i class="uil uil-spinner fa-spin"></i> Sending...';
+        
+        showTestResult('loading', 'Sending verification email...');
+        
+        // Make the API call
+        fetch(`/test-email-direct/${encodeURIComponent(email)}/${language}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showTestResult('success', data.message);
+                } else {
+                    showTestResult('error', data.message);
+                }
+            })
+            .catch(error => {
+                showTestResult('error', 'Network error: ' + error.message);
+            })
+            .finally(() => {
+                // Reset button state
+                document.querySelector('.direct-test-button.verification').disabled = false;
+                document.querySelector('.direct-test-button.verification').innerHTML = '<i class="uil uil-envelope-check"></i> Send Verification Email';
+            });
+    }
+    
+    function sendDirectFeedbackEmail() {
+        const email = document.getElementById('testEmailAddress').value;
+        const language = document.getElementById('testEmailLanguage').value;
+        const resultDiv = document.getElementById('emailTestResult');
+        
+        if (!email) {
+            showTestResult('error', 'Please enter an email address');
+            return;
+        }
+        
+        // Show loading state
+        document.querySelector('.direct-test-button.feedback').disabled = true;
+        document.querySelector('.direct-test-button.feedback').innerHTML = '<i class="uil uil-spinner fa-spin"></i> Sending...';
+        
+        showTestResult('loading', 'Sending feedback email...');
+        
+        // Make the API call
+        fetch(`/test-feedback-email-direct/${encodeURIComponent(email)}/${language}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showTestResult('success', data.message);
+                } else {
+                    showTestResult('error', data.message);
+                    console.error('Error details:', data);
+                }
+            })
+            .catch(error => {
+                showTestResult('error', 'Network error: ' + error.message);
+            })
+            .finally(() => {
+                // Reset button state
+                document.querySelector('.direct-test-button.feedback').disabled = false;
+                document.querySelector('.direct-test-button.feedback').innerHTML = '<i class="uil uil-comment-alt-message"></i> Send Feedback Email';
+            });
+    }
+    
+    function showTestResult(type, message) {
+        const resultDiv = document.getElementById('emailTestResult');
+        resultDiv.style.display = 'block';
+        
+        if (type === 'loading') {
+            resultDiv.style.backgroundColor = '#f0f9ff';
+            resultDiv.style.color = '#0369a1';
+            resultDiv.style.border = '1px solid #bae6fd';
+            resultDiv.innerHTML = `<div style="display: flex; align-items: center; gap: 10px;">
+                <i class="uil uil-spinner fa-spin" style="font-size: 1.2rem;"></i>
+                ${message}
+            </div>`;
+        } else if (type === 'success') {
+            resultDiv.style.backgroundColor = '#f0fdf4';
+            resultDiv.style.color = '#166534';
+            resultDiv.style.border = '1px solid #bbf7d0';
+            resultDiv.innerHTML = `<div style="display: flex; align-items: center; gap: 10px;">
+                <i class="uil uil-check-circle" style="font-size: 1.2rem;"></i>
+                ${message}
+            </div>`;
+        } else if (type === 'error') {
+            resultDiv.style.backgroundColor = '#fef2f2';
+            resultDiv.style.color = '#b91c1c';
+            resultDiv.style.border = '1px solid #fecaca';
+            resultDiv.innerHTML = `<div style="display: flex; align-items: center; gap: 10px;">
+                <i class="uil uil-exclamation-triangle" style="font-size: 1.2rem;"></i>
+                ${message}
+            </div>
+            <div style="margin-top: 8px; font-size: 0.9rem;">Check the developer console for more details.</div>`;
+        }
+    }
 </script>
 @endsection 

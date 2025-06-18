@@ -56,6 +56,50 @@ Route::post('/email/verification-notification', function (Request $request) {
     return back()->with('message', 'Verification link sent!');
 })->middleware(['auth', 'throttle:6,1'])->name('verification.send');
 
+// Test email routes with direct feedback
+Route::get('/test-email-direct/{email}/{language?}', function ($email, $language = 'en') {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return response()->json(['success' => false, 'message' => 'Invalid email address']);
+    }
+    
+    try {
+        app(\App\Http\Controllers\Admin\SettingsController::class)->sendTestEmailDirect($email, $language);
+        return response()->json(['success' => true, 'message' => 'Email sent successfully to ' . $email]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false, 
+            'message' => 'Failed to send email: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+Route::get('/test-feedback-email-direct/{email}/{language?}', function ($email, $language = 'en') {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return response()->json(['success' => false, 'message' => 'Invalid email address']);
+    }
+    
+    try {
+        app(\App\Http\Controllers\Admin\SettingsController::class)->sendTestFeedbackEmailDirect($email, $language);
+        return response()->json(['success' => true, 'message' => 'Feedback email sent successfully to ' . $email]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false, 
+            'message' => 'Failed to send feedback email: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// More comprehensive email testing endpoint
+Route::post('/test-email-delivery', [\App\Http\Controllers\Admin\SettingsController::class, 'testEmailDelivery'])
+    ->name('test.email.delivery');
+
+// Email debug page
+Route::get('/email-debug', function () {
+    return view('email-debug');
+})->name('email.debug');
+
 Auth::routes();
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -75,4 +119,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'index'])->name('admin.settings.index');
     Route::put('/settings', [\App\Http\Controllers\Admin\SettingsController::class, 'update'])->name('admin.settings.update');
     Route::get('/settings/send-test-email', [\App\Http\Controllers\Admin\SettingsController::class, 'sendTestEmail'])->name('admin.settings.send-test-email');
+    Route::get('/settings/send-test-feedback-email', [\App\Http\Controllers\Admin\SettingsController::class, 'sendTestFeedbackEmail'])->name('admin.settings.send-test-feedback-email');
+    Route::get('/settings/preview-email', [\App\Http\Controllers\Admin\SettingsController::class, 'showEmailPreview'])->name('admin.settings.preview-email');
+    Route::post('/settings/upload-logo', [\App\Http\Controllers\Admin\SettingsController::class, 'uploadLogo'])->name('admin.settings.upload-logo');
+    Route::delete('/settings/remove-logo', [\App\Http\Controllers\Admin\SettingsController::class, 'removeLogo'])->name('admin.settings.remove-logo');
 });

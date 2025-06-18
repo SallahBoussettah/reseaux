@@ -127,24 +127,28 @@ class ClientController extends Controller
             
             // Determine which email template to use based on the user's language
             $emailTemplate = 'emails.token_verification';
-            $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Your WiFi Verification Code');
+            $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
             
             if ($validatedData['language'] === 'fr') {
                 $emailTemplate = 'emails.token_verification_fr';
-                $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Votre code de vérification WiFi');
+                $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Aqua Mirage Marrakech - Votre code d\'accès WiFi');
             } else {
                 $emailTemplate = 'emails.token_verification_en';
-                $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Your WiFi Verification Code');
+                $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
             }
+            
+            // Get the logo URL from settings
+            $logo_url = \App\Models\Setting::get('email_logo_url', '');
             
             Mail::send($emailTemplate, [
                 'verificationToken' => $verificationToken,
                 'verificationUrl' => $verificationUrl,
-                'language' => $validatedData['language']
+                'language' => $validatedData['language'],
+                'logo_url' => $logo_url
             ], function ($message) use ($validatedData, $emailSubject) {
                 $message->to($validatedData['email'])
                     ->subject($emailSubject)
-                    ->from('wifi@eureka-communication.com');
+                    ->from('hotel@aquamiragemarrakech.com', 'Aqua Mirage Marrakech');
             });
             
             // Log successful email sending attempt
@@ -533,19 +537,36 @@ class ClientController extends Controller
      */
     public function testEmail(Request $request)
     {
-        $email = $request->input('email') ?? 'wifi@eureka-communication.com';
-        $token = bin2hex(random_bytes(16));
-        $verificationLink = "https://wifi.eureka-communication.com/public/email/verify?token=$token";
+        $email = $request->input('email') ?? 'hotel@aquamiragemarrakech.com';
+        $language = $request->input('language') ?? 'en';
+        $token = mt_rand(100000, 999999); // Generate a 6-digit code instead of hex
         
         try {
-            Mail::send('emails.verification', ['verificationLink' => $verificationLink], function ($message) use ($email) {
+            // Determine which email template to use based on the selected language
+            $emailTemplate = 'emails.token_verification_en';
+            $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
+            
+            if ($language === 'fr') {
+                $emailTemplate = 'emails.token_verification_fr';
+                $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Aqua Mirage Marrakech - Votre code d\'accès WiFi');
+            }
+            
+            // Create verification URL with token
+            $verificationUrl = route('token.verification') . '?token=' . $token;
+            
+            // Send the email using the appropriate template
+            Mail::send($emailTemplate, [
+                'verificationToken' => $token,
+                'verificationUrl' => $verificationUrl,
+                'language' => $language
+            ], function ($message) use ($email, $emailSubject) {
                 $message->to($email)
-                    ->subject('Test - Vérifiez votre adresse e-mail')
-                    ->from('wifi@eureka-communication.com');
+                    ->subject($emailSubject)
+                    ->from('hotel@aquamiragemarrakech.com', 'Aqua Mirage Marrakech');
             });
             
-            \Log::info('Test email sent to: ' . $email);
-            return response()->json(['success' => true, 'message' => 'Test email sent to ' . $email]);
+            \Log::info('Test email sent to: ' . $email . ' using language: ' . $language);
+            return response()->json(['success' => true, 'message' => 'Test email sent to ' . $email . ' using ' . ($language === 'fr' ? 'French' : 'English') . ' template']);
         } catch (\Exception $e) {
             \Log::error('Failed to send test email: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Failed to send test email: ' . $e->getMessage()]);
