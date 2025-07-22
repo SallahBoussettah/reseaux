@@ -294,7 +294,8 @@ class ClientController extends Controller
             ], function ($message) use ($validatedData, $emailSubject) {
                 $message->to($validatedData['email'])
                     ->subject($emailSubject)
-                    ->from('hotel@aquamiragemarrakech.com', 'Aqua Mirage Marrakech');
+                    ->from(config('mail.from.address', 'noreply@magichotels.ma'), 
+                          config('mail.from.name', 'Aqua Mirage Marrakech'));
             });
             
             // Log successful email sending attempt
@@ -749,7 +750,8 @@ class ClientController extends Controller
             ], function ($message) use ($email, $emailSubject) {
                 $message->to($email)
                     ->subject($emailSubject)
-                    ->from('hotel@aquamiragemarrakech.com', 'Aqua Mirage Marrakech');
+                    ->from(config('mail.from.address', 'noreply@magichotels.ma'), 
+                          config('mail.from.name', 'Aqua Mirage Marrakech'));
             });
             
             \Log::info('Test email sent to: ' . $email . ' using language: ' . $language);
