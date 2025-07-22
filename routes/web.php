@@ -40,6 +40,13 @@ Route::get('/verification/failed', function () {
     return view('verification_failed');
 })->name('verification_failed');
 
+// Feedback routes
+Route::get('/feedback', [App\Http\Controllers\FeedbackController::class, 'index'])->name('feedback');
+Route::post('/feedback', [App\Http\Controllers\FeedbackController::class, 'store'])->name('feedback.store');
+Route::get('/feedback/thank-you', [App\Http\Controllers\FeedbackController::class, 'thankYou'])->name('feedback.thank_you');
+Route::get('/feedback/already-submitted', [App\Http\Controllers\FeedbackController::class, 'alreadySubmitted'])->name('feedback.already_submitted');
+Route::get('/feedback/invalid-token', [App\Http\Controllers\FeedbackController::class, 'invalidToken'])->name('feedback.invalid_token');
+
 /*Route::get('/email/verify', function () {
     return view('auth.verify-email');
 })->middleware('auth')->name('verification.notice');
@@ -123,4 +130,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/settings/preview-email', [\App\Http\Controllers\Admin\SettingsController::class, 'showEmailPreview'])->name('admin.settings.preview-email');
     Route::post('/settings/upload-logo', [\App\Http\Controllers\Admin\SettingsController::class, 'uploadLogo'])->name('admin.settings.upload-logo');
     Route::delete('/settings/remove-logo', [\App\Http\Controllers\Admin\SettingsController::class, 'removeLogo'])->name('admin.settings.remove-logo');
+
+    // Admin routes
+    Route::get('/admin/feedback', [App\Http\Controllers\FeedbackController::class, 'dashboard'])->name('dashboard.feedback');
 });

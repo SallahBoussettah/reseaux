@@ -41,4 +41,19 @@ class User extends Authenticatable
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    /**
+     * Check if user is an administrator
+     *
+     * @return bool
+     */
+    public function isAdmin()
+    {
+        // For simplicity, admin status is determined by email address
+        // In a production system, this should use roles or permissions
+        return in_array($this->email, [
+            'admin@example.com',
+            'admin@eureka.com',
+        ]) || $this->id === 1; // ID 1 is typically the first admin user
+    }
 }

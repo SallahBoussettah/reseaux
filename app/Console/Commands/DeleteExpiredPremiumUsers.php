@@ -226,8 +226,14 @@ class DeleteExpiredPremiumUsers extends Command
         // Get the logo URL from settings
         $logo_url = Setting::get('email_logo_url', '');
         
-        // Generate a feedback URL
-        $feedback_url = url('/feedback');
+        // Generate a verification token if not present
+        if (empty($user->verification_token)) {
+            $user->verification_token = substr(md5(rand(0, 9999) . time() . $user->email), 0, 32);
+            $user->save();
+        }
+        
+        // Generate a feedback URL with user identification parameters
+        $feedback_url = url('/feedback') . '?email=' . urlencode($user->email) . '&token=' . urlencode($user->verification_token);
         
         // Determine which email template to use based on the language
         $emailTemplate = 'emails.feedback';

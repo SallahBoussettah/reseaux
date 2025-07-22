@@ -51,4 +51,12 @@ class Client extends Authenticatable implements MustVerifyEmail
         'verification_token_expires_at' => 'datetime',
         'scheduled_deletion_at' => 'datetime',
     ];
+
+    /**
+     * Get the feedback submitted by the client
+     */
+    public function feedback()
+    {
+        return $this->hasMany(Feedback::class);
+    }
 }

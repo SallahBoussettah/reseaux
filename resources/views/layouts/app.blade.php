@@ -22,7 +22,7 @@
     -->
     @yield('css')
 </head>
-<body>
+<body class="@yield('body-class')">
     <div class="container">
         @yield('content')
     </div>

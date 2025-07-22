@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Setting;
+use App\Models\Client;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -442,8 +443,23 @@ class SettingsController extends Controller
         // Get the logo URL from settings
         $logo_url = Setting::get('email_logo_url', '');
         
-        // Generate a feedback URL for testing
-        $feedback_url = url('/feedback');
+        // Generate a test token for the feedback URL (max 6 chars to fit in DB column)
+        // Use 'T' prefix for test tokens and ensure uniqueness with timestamp-based values
+        $testToken = 'T' . substr(time(), -5);
+        
+        // Create or update a temporary client record for testing
+        $testClient = \App\Models\Client::updateOrCreate(
+            ['email' => $email],
+            [
+                'full_name' => 'Test User',
+                'verification_token' => $testToken,
+                'verification_token_expires_at' => now()->addDays(7),
+                'status' => 'active'
+            ]
+        );
+        
+        // Generate a feedback URL for testing with token and email
+        $feedback_url = url('/feedback') . '?token=' . $testToken . '&email=' . urlencode($email);
         
         // Determine which email template to use based on the requested language
         $emailTemplate = 'emails.feedback';
@@ -652,8 +668,23 @@ class SettingsController extends Controller
         // Get the logo URL from settings
         $logo_url = Setting::get('email_logo_url', '');
         
-        // Generate a feedback URL for testing
-        $feedback_url = url('/feedback');
+        // Generate a test token for the feedback URL (max 6 chars to fit in DB column)
+        // Use 'T' prefix for test tokens and ensure uniqueness with timestamp-based values
+        $testToken = 'T' . substr(time(), -5);
+        
+        // Create or update a temporary client record for testing
+        $testClient = \App\Models\Client::updateOrCreate(
+            ['email' => $email],
+            [
+                'full_name' => 'Test User',
+                'verification_token' => $testToken,
+                'verification_token_expires_at' => now()->addDays(7),
+                'status' => 'active'
+            ]
+        );
+        
+        // Generate a feedback URL for testing with token and email
+        $feedback_url = url('/feedback') . '?token=' . $testToken . '&email=' . urlencode($email);
         
         // Determine which email template to use based on the requested language
         $emailTemplate = 'emails.feedback';

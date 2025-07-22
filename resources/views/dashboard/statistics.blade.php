@@ -465,7 +465,6 @@
                                 <i class="uil uil-arrow-down text-white mb-2" style="font-size: 2rem;"></i>
                                 <h6 class="text-white mb-2">Total Download</h6>
                                 <h2 class="mb-0 fw-bold text-white">{{ $totalRxRateFormatted }}</h2>
-                                <p class="small text-white mt-2">{{ $formattedDatabaseTotals['uploaded'] }} total</p>
                             </div>
                         </div>
                     </div>
@@ -475,7 +474,6 @@
                                 <i class="uil uil-arrow-up text-white mb-2" style="font-size: 2rem;"></i>
                                 <h6 class="text-white mb-2">Total Upload</h6>
                                 <h2 class="mb-0 fw-bold text-white">{{ $totalTxRateFormatted }}</h2>
-                                <p class="small text-white mt-2">{{ $formattedDatabaseTotals['downloaded'] }} total</p>
                             </div>
                         </div>
                     </div>
