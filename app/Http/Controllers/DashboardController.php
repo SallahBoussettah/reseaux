@@ -75,27 +75,62 @@ class DashboardController extends Controller
                 ];
             });
 
-        // Get the counts of device types in the last 7 days
-        $deviceTypes = Client::select('device_type', DB::raw('count(*) as total'))
+        // Get the counts of platforms in the last 7 days
+        $platforms = Client::select('platform', DB::raw('count(*) as total'))
             ->where('created_at', '>=', Carbon::now()->subDays(7))
-            ->whereNotNull('device_type')
-            ->where('device_type', '!=', '')
-            ->groupBy('device_type')
+            ->whereNotNull('platform')
+            ->where('platform', '!=', '')
+            ->groupBy('platform')
             ->orderBy('total', 'desc')
             ->get();
 
-        // If no device types found, add some default data
-        if ($deviceTypes->isEmpty()) {
-            $deviceTypes = collect([
-                (object)['device_type' => 'Mobile', 'total' => 0],
-                (object)['device_type' => 'Desktop', 'total' => 0],
-                (object)['device_type' => 'Tablet', 'total' => 0]
+        // If no platforms found, add some default data
+        if ($platforms->isEmpty()) {
+            $platforms = collect([
+                (object)['platform' => 'Android', 'total' => 0],
+                (object)['platform' => 'Windows', 'total' => 0],
+                (object)['platform' => 'iOS', 'total' => 0]
             ]);
         }
 
+        // Format platform names for better display
+        $formattedPlatforms = $platforms->map(function ($platform) {
+            $platformName = $platform->platform;
+            
+            // Format common platform names
+            switch (strtolower($platformName)) {
+                case 'windows nt':
+                case 'windows':
+                    $platformName = 'Windows';
+                    break;
+                case 'android':
+                    $platformName = 'Android';
+                    break;
+                case 'ios':
+                case 'iphone os':
+                    $platformName = 'iOS';
+                    break;
+                case 'mac os x':
+                case 'macos':
+                    $platformName = 'macOS';
+                    break;
+                case 'linux':
+                    $platformName = 'Linux';
+                    break;
+                default:
+                    $platformName = ucfirst($platformName);
+                    break;
+            }
+            
+            return (object)[
+                'platform' => $platformName,
+                'total' => $platform->total
+            ];
+        });
+
         // Prepare data for the chart
-        $labels = $deviceTypes->pluck('device_type')->toArray();
-        $datadevice = $deviceTypes->pluck('total')->toArray();
+        $labels = $formattedPlatforms->pluck('platform')->toArray();
+        $datadevice = $formattedPlatforms->pluck('total')->toArray();
 
         return view('dashboard.index', compact(
             'totalUsers', 
