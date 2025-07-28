@@ -313,6 +313,33 @@ class MikroTikService
         }
     }
     
+    // Get multiple bandwidth samples for more accurate readings
+    public function getBandwidthSamples($samples = 3, $interval = 1)
+    {
+        try {
+            $allSamples = [];
+            
+            for ($i = 0; $i < $samples; $i++) {
+                $query = (new Query('/ip/hotspot/active/print'));
+                $activeConnections = $this->client->query($query)->read();
+                
+                $allSamples[] = [
+                    'timestamp' => time(),
+                    'connections' => $activeConnections
+                ];
+                
+                if ($i < $samples - 1) {
+                    sleep($interval);
+                }
+            }
+            
+            return $allSamples;
+        } catch (\Exception $e) {
+            \Log::error('Failed to get bandwidth samples: ' . $e->getMessage());
+            return [];
+        }
+    }
+    
     // Get active connections with bandwidth usage (Rx/Tx rates)
     public function getActiveConnectionsWithBandwidth()
     {
@@ -331,6 +358,9 @@ class MikroTikService
             $query = (new Query('/ip/hotspot/active/print'));
             $activeConnections = $this->client->query($query)->read();
             
+            // Also get interface traffic for more accurate bandwidth data
+            $interfaceTraffic = $this->getInterfaceTraffic();
+            
             // Log the number of active connections found
             \Log::info('Found ' . count($activeConnections) . ' active connections on MikroTik router');
             
@@ -348,6 +378,9 @@ class MikroTikService
                 // Extract bandwidth usage (convert from bytes to more readable format)
                 $rxRateRaw = isset($connection['rx-rate']) ? (int)$connection['rx-rate'] : 0;
                 $txRateRaw = isset($connection['tx-rate']) ? (int)$connection['tx-rate'] : 0;
+                
+                // Log the raw rates for debugging
+                \Log::debug("Raw rates for {$username}: RX={$rxRateRaw} bps, TX={$txRateRaw} bps");
                 
                 // Extract total bytes transferred
                 $bytesIn = isset($connection['bytes-in']) ? (int)$connection['bytes-in'] : 0;
@@ -402,10 +435,11 @@ class MikroTikService
                 
                 // Log detailed information for each connection
                 \Log::info("Connection details for {$username}: " .
-                          "RX={$rxRate} ({$txRateRaw} bps), " . // Note the deliberate swap
-                          "TX={$txRate} ({$rxRateRaw} bps), " . // Note the deliberate swap
-                          "Bytes In={$bytesInFormatted}, " .
-                          "Bytes Out={$bytesOutFormatted}");
+                          "Current RX={$rxRate} ({$txRateRaw} bps), " . // Note the deliberate swap
+                          "Current TX={$txRate} ({$rxRateRaw} bps), " . // Note the deliberate swap
+                          "Total Downloaded={$bytesInFormatted} ({$bytesIn} bytes), " .
+                          "Total Uploaded={$bytesOutFormatted} ({$bytesOut} bytes), " .
+                          "Session Time={$uptime}");
             }
             
             return $formattedConnections;

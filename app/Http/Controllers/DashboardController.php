@@ -297,22 +297,30 @@ class DashboardController extends Controller
                 ];
             });
 
-        // Get top users with bandwidth usage
-        $topUsers = Client::orderBy('total_downloaded_bytes', 'desc')
+        // Get top users with bandwidth usage (ordered by total consumption)
+        $topUsers = Client::where(function($query) {
+                $query->where('total_downloaded_bytes', '>', 0)
+                      ->orWhere('total_uploaded_bytes', '>', 0);
+            })
+            ->orderByRaw('(total_downloaded_bytes + total_uploaded_bytes) DESC')
             ->take(10)
             ->get()
             ->map(function ($client) {
                 return [
-                    'name' => $client->name ?? $client->full_name ?? 'Unknown',
-                    'downloaded' => $this->formatBytes($client->total_downloaded_bytes),
-                    'uploaded' => $this->formatBytes($client->total_uploaded_bytes),
+                    'name' => $client->full_name ?? $client->name ?? 'Unknown',
+                    'downloaded' => $this->formatBytes($client->total_downloaded_bytes ?? 0),
+                    'uploaded' => $this->formatBytes($client->total_uploaded_bytes ?? 0),
+                    'total' => $this->formatBytes(($client->total_downloaded_bytes ?? 0) + ($client->total_uploaded_bytes ?? 0)),
+                    'mac_address' => $client->mac_address,
                 ];
             });
 
-        // Create bandwidth usage per user data for chart
-        $bandwidthUsagePerUser = Client::where('total_downloaded_bytes', '>', 0)
-            ->orWhere('total_uploaded_bytes', '>', 0)
-            ->orderBy('total_downloaded_bytes', 'desc')
+        // Create bandwidth usage per user data for chart (ordered by total consumption)
+        $bandwidthUsagePerUser = Client::where(function($query) {
+                $query->where('total_downloaded_bytes', '>', 0)
+                      ->orWhere('total_uploaded_bytes', '>', 0);
+            })
+            ->orderByRaw('(total_downloaded_bytes + total_uploaded_bytes) DESC')
             ->take(10)
             ->get()
             ->map(function ($client) {
@@ -322,10 +330,13 @@ class DashboardController extends Controller
                     'total_uploaded_bytes' => $client->total_uploaded_bytes ?? 0,
                     'downloaded_formatted' => $this->formatBytes($client->total_downloaded_bytes ?? 0),
                     'uploaded_formatted' => $this->formatBytes($client->total_uploaded_bytes ?? 0),
+                    'total_formatted' => $this->formatBytes(($client->total_downloaded_bytes ?? 0) + ($client->total_uploaded_bytes ?? 0)),
+                    'mac_address' => $client->mac_address,
                 ];
             });
 
         // Get MikroTik data if available
+        $userDataMap = [];
         try {
             // Check if we have cached MikroTik data
             if (Cache::has('bandwidth_data')) {
@@ -350,6 +361,32 @@ class DashboardController extends Controller
                 if (isset($bandwidthData['total_tx_rate_formatted'])) {
                     $totalTxRateFormatted = $bandwidthData['total_tx_rate_formatted'];
                 }
+
+                if (isset($bandwidthData['user_data'])) {
+                    $userDataMap = $bandwidthData['user_data'];
+                }
+            }
+
+            // If we don't have user data from cache, generate it from active connections
+            if (empty($userDataMap) && !empty($activeConnections)) {
+                $macAddresses = collect($activeConnections)->pluck('mac_address')->filter()->toArray();
+                
+                if (!empty($macAddresses)) {
+                    $clients = \App\Models\Client::whereIn('mac_address', $macAddresses)->get();
+                    
+                    foreach ($clients as $client) {
+                        $userDataMap[$client->mac_address] = [
+                            'id' => $client->id,
+                            'full_name' => $client->full_name,
+                            'email' => $client->email,
+                            'status' => $client->status,
+                            'total_downloaded_bytes' => $client->total_downloaded_bytes ?? 0,
+                            'total_uploaded_bytes' => $client->total_uploaded_bytes ?? 0,
+                            'total_downloaded_formatted' => $this->formatBytes($client->total_downloaded_bytes ?? 0),
+                            'total_uploaded_formatted' => $this->formatBytes($client->total_uploaded_bytes ?? 0),
+                        ];
+                    }
+                }
             }
         } catch (\Exception $e) {
             \Log::error('Error retrieving bandwidth data: ' . $e->getMessage());
@@ -366,7 +403,8 @@ class DashboardController extends Controller
             'bandwidthUsagePerUser' => $bandwidthUsagePerUser,
             'databaseTotals' => $databaseTotals,
             'formattedDatabaseTotals' => $formattedDatabaseTotals,
-            'browserStats' => $browserStats
+            'browserStats' => $browserStats,
+            'user_data' => $userDataMap
         ]);
     }
 
@@ -514,9 +552,9 @@ class DashboardController extends Controller
             return redirect()->back()->withErrors(['error' => 'Client not found']);
         }
 
-        // Schedule the client for deletion in 1 minute
+        // Set the client to premium user (for testing purposes)
         $client->profile_type = 'premium_user';
-        $client->scheduled_deletion_at = now()->addMinute();
+        $client->premium_expires_at = now()->addDays((int) \App\Models\Setting::get('email_premium_duration_days', 7));
         $client->save();
 
         return redirect()->back()->with('success', 'User scheduled for removal from router and disabling in 1 minute');
@@ -582,13 +620,17 @@ class DashboardController extends Controller
                 // Fetch clients with these MAC addresses
                 $clients = \App\Models\Client::whereIn('mac_address', $macAddresses)->get();
 
-                // Create a map of MAC address to user data
+                // Create a map of MAC address to user data including database totals
                 foreach ($clients as $client) {
                     $userDataMap[$client->mac_address] = [
                         'id' => $client->id,
                         'full_name' => $client->full_name,
                         'email' => $client->email,
-                        'status' => $client->status
+                        'status' => $client->status,
+                        'total_downloaded_bytes' => $client->total_downloaded_bytes ?? 0,
+                        'total_uploaded_bytes' => $client->total_uploaded_bytes ?? 0,
+                        'total_downloaded_formatted' => $this->formatBytes($client->total_downloaded_bytes ?? 0),
+                        'total_uploaded_formatted' => $this->formatBytes($client->total_uploaded_bytes ?? 0),
                     ];
                 }
 
@@ -813,58 +855,27 @@ class DashboardController extends Controller
     private function updateBandwidthUsageInDatabase($activeConnections)
     {
         try {
+            // Note: This method is called frequently from the dashboard
+            // The main bandwidth allocation is handled by the scheduled command
+            // Here we just update last_login_at for active users
+            
             $updated = false;
             foreach ($activeConnections as $connection) {
-                // Skip if no MAC address or bytes data
-                if (
-                    !isset($connection['mac_address']) ||
-                    !isset($connection['bytes_in']) ||
-                    !isset($connection['bytes_out'])
-                ) {
+                if (!isset($connection['mac_address'])) {
                     continue;
                 }
 
                 $macAddress = $connection['mac_address'];
-                $bytesIn = (int) $connection['bytes_in'];
-                $bytesOut = (int) $connection['bytes_out'];
-
-                // Find client by MAC address
                 $client = Client::where('mac_address', $macAddress)->first();
 
                 if ($client) {
-                    // Store previous values for logging
-                    $previousDownloaded = $client->total_downloaded_bytes;
-                    $previousUploaded = $client->total_uploaded_bytes;
-
-                    // Update client's bandwidth usage
-                    // We're using the bytes from the active session
-                    // We'll update the database only if the new values are higher than existing ones
-                    if ($bytesIn > 0 && $bytesIn > $client->total_downloaded_bytes) {
-                        $client->total_downloaded_bytes = $bytesIn;
-                        $updated = true;
-                    }
-
-                    if ($bytesOut > 0 && $bytesOut > $client->total_uploaded_bytes) {
-                        $client->total_uploaded_bytes = $bytesOut;
-                        $updated = true;
-                    }
-
-                    // Update last_login_at if not set to track active users
-                    if (empty($client->last_login_at)) {
+                    // Update last_login_at to track active users
+                    if (empty($client->last_login_at) || $client->last_login_at < now()->subMinutes(5)) {
                         $client->last_login_at = now();
-                        $updated = true;
-                    }
-
-                    // Save changes if there are any
-                    if ($client->isDirty()) {
                         $client->save();
-
-                        \Log::info("Updated bandwidth usage for client {$client->id} ({$client->mac_address}): " .
-                            "Downloaded: {$previousDownloaded} -> {$client->total_downloaded_bytes}, " .
-                            "Uploaded: {$previousUploaded} -> {$client->total_uploaded_bytes}");
+                        $updated = true;
+                        \Log::debug("Updated last_login_at for active user: {$macAddress}");
                     }
-                } else {
-                    \Log::warning("Client with MAC address {$macAddress} not found in database");
                 }
             }
 

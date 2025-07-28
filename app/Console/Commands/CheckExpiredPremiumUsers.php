@@ -70,12 +70,11 @@ class CheckExpiredPremiumUsers extends Command
                         \Log::info('Found user in MikroTik: ' . $user->mac_address);
                         $user_id = $user_info[0]['.id'];  // Get the user's ID from MikroTik
                         
-                        // Update the user's profile in MikroTik
-                        $update_profile_query = new Query('/ip/hotspot/user/set');
-                        $update_profile_query->equal('.id', $user_id)
-                                         ->equal('profile', 'free_user');  // Revert to free plan
-                        $mikrotikClient->query($update_profile_query)->read();
-                        \Log::info('MikroTik API Response for Profile Update: User reverted to free_user profile');
+                        // Remove the user from MikroTik completely (no internet access)
+                        $remove_user_query = new Query('/ip/hotspot/user/remove');
+                        $remove_user_query->equal('.id', $user_id);
+                        $mikrotikClient->query($remove_user_query)->read();
+                        \Log::info('MikroTik API Response: User removed from hotspot (no internet access)');
 
                         // Step 3: Find and remove the active session if the user is connected
                         $find_active_user_query = new Query('/ip/hotspot/active/print');
@@ -97,23 +96,23 @@ class CheckExpiredPremiumUsers extends Command
 
                 // Step 4: Update the user record in the database
                 $user->premium_expires_at = null;  // Clear premium expiration
-                $user->profile_type = 'free_user';  // Revert to free user
+                $user->profile_type = 'expired';  // Set to expired (loses internet access)
+                $user->status = 'deactivated';  // Deactivate the user
                 
-                // Schedule the user for deletion in 24 hours
-                $user->scheduled_deletion_at = Carbon::now()->addHours(24);
-                \Log::info('Scheduled user for deletion at: ' . $user->scheduled_deletion_at);
+                // No scheduling for deletion - user remains as expired
+                \Log::info('User expired and deactivated: ' . $user->email);
                 
                 $saved = $user->save();
                 if ($saved) {
                     \Log::info('Successfully saved database changes for user: ' . $user->email, [
                         'user_id' => $user->id,
                         'profile_type' => $user->profile_type,
-                        'scheduled_deletion_at' => $user->scheduled_deletion_at
+                        'status' => $user->status
                     ]);
                 } else {
                     \Log::error('Failed to save database changes for user: ' . $user->email);
                 }
-                \Log::info('User reverted to free plan and scheduled for deletion: ' . $user->email);
+                \Log::info('User expired and lost internet access: ' . $user->email);
 
             } catch (\Exception $e) {
                 \Log::error('MikroTik API Error for user ' . $user->email . ': ' . $e->getMessage());

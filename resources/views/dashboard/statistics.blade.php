@@ -622,7 +622,7 @@
                                                 <i class="uil uil-arrow-down text-white mb-2" style="font-size: 1.75rem;"></i>
                                                 <h6 class="text-white mb-2">Total Downloaded</h6>
                                                 <h2 class="mb-0 fw-bold text-white">
-                                                    {{ $formattedDatabaseTotals['uploaded'] }}
+                                                    {{ $formattedDatabaseTotals['downloaded'] }}
                                                 </h2>
                                             </div>
                                         </div>
@@ -633,7 +633,7 @@
                                                 <i class="uil uil-arrow-up text-white mb-2" style="font-size: 1.75rem;"></i>
                                                 <h6 class="text-white mb-2">Total Uploaded</h6>
                                                 <h2 class="mb-0 fw-bold text-white">
-                                                    {{ $formattedDatabaseTotals['downloaded'] }}
+                                                    {{ $formattedDatabaseTotals['uploaded'] }}
                                                 </h2>
                                             </div>
                                         </div>
@@ -736,18 +736,21 @@
                                 <td><span class="small text-muted font-monospace">{{ $connection['mac_address'] }}</span></td>
                                 <td>
                                     <div class="d-flex flex-column">
-                                        @if((int)$connection['tx_rate_raw'] > 0)
-                                            <span class="badge bg-success rounded-pill mb-1">{{ $connection['tx_rate'] }}</span>
-                                        @endif
-                                        <span class="text-success fw-medium">{{ $connection['bytes_out_formatted'] }}</span>
+                                        @php
+                                            $userData = $user_data[$connection['mac_address']] ?? null;
+                                        @endphp
+                                        <span class="text-success fw-medium">
+                                            {{ $userData ? $userData['total_downloaded_formatted'] : '0 B' }}
+                                        </span>
+                                        <small class="text-muted">Total Downloaded</small>
                                     </div>
                                 </td>
                                 <td>
                                     <div class="d-flex flex-column">
-                                        <!-- @if((int)$connection['rx_rate_raw'] > 0)
-                                            <span class="badge bg-primary rounded-pill mb-1">{{ $connection['rx_rate'] }}</span>
-                                        @endif -->
-                                        <span class="text-primary fw-medium">{{ $connection['bytes_in_formatted'] }}</span>
+                                        <span class="text-primary fw-medium">
+                                            {{ $userData ? $userData['total_uploaded_formatted'] : '0 B' }}
+                                        </span>
+                                        <small class="text-muted">Total Uploaded</small>
                                     </div>
                                 </td>
                                 <td>
@@ -881,6 +884,74 @@
                     <div class="card-body">
                         <div id="user-activity-chart"></div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Users by Data Consumption -->
+<div class="geex-content__wrapper">
+    <div class="geex-content__section-wrapper mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <div class="d-flex align-items-center">
+                    <i class="uil uil-trophy text-primary me-2" style="font-size: 1.25rem;"></i>
+                    <h5 class="mb-0">Top utilisateurs par consommation de données</h5>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Rang</th>
+                                <th>Utilisateur</th>
+                                <th>Adresse MAC</th>
+                                <th>Total Téléchargé</th>
+                                <th>Total Envoyé</th>
+                                <th>Consommation Totale</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($topUsers as $index => $user)
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        @if($index < 3)
+                                            <span class="badge bg-{{ $index === 0 ? 'warning' : ($index === 1 ? 'secondary' : 'dark') }} rounded-pill">
+                                                {{ $index + 1 }}
+                                            </span>
+                                        @else
+                                            <span class="badge bg-light text-dark rounded-pill">{{ $index + 1 }}</span>
+                                        @endif
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar-sm bg-light rounded-circle text-center me-2" style="width: 32px; height: 32px; line-height: 32px;">
+                                            <i class="uil uil-user text-primary"></i>
+                                        </div>
+                                        <span class="fw-medium">{{ $user['name'] }}</span>
+                                    </div>
+                                </td>
+                                <td><span class="small text-muted font-monospace">{{ $user['mac_address'] ?? 'N/A' }}</span></td>
+                                <td><span class="text-success fw-medium">{{ $user['downloaded'] }}</span></td>
+                                <td><span class="text-primary fw-medium">{{ $user['uploaded'] }}</span></td>
+                                <td><span class="text-dark fw-bold">{{ $user['total'] }}</span></td>
+                            </tr>
+                            @empty
+                            <tr>
+                                <td colspan="6" class="text-center py-4">
+                                    <div class="py-3">
+                                        <i class="uil uil-chart-bar text-muted" style="font-size: 2rem;"></i>
+                                        <p class="mt-2 mb-0">Aucune donnée de consommation disponible</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1395,10 +1466,10 @@ function initializeSecondaryCharts() {
     let bandwidthOptions = {
         series: [{
             name: 'Downloaded',
-            data: bandwidthUsage.map(user => user.total_uploaded_bytes)
+            data: bandwidthUsage.map(user => user.total_downloaded_bytes)
         }, {
             name: 'Uploaded',
-            data: bandwidthUsage.map(user => user.total_downloaded_bytes)
+            data: bandwidthUsage.map(user => user.total_uploaded_bytes)
         }],
         chart: {
             height: 350,
@@ -1422,7 +1493,7 @@ function initializeSecondaryCharts() {
             formatter: function (val, opt) {
                 // Return the formatted byte value
                 if (opt.w.globals.labels[opt.dataPointIndex]) {
-                    return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'uploaded_formatted' : 'downloaded_formatted'];
+                    return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'downloaded_formatted' : 'uploaded_formatted'];
                 }
                 return val;
             },
@@ -1443,7 +1514,7 @@ function initializeSecondaryCharts() {
                 formatter: function (val, opt) {
                     // Return the formatted byte value
                     if (opt.w.globals.labels[opt.dataPointIndex]) {
-                        return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'uploaded_formatted' : 'downloaded_formatted'];
+                        return bandwidthUsage[opt.dataPointIndex][opt.seriesIndex === 0 ? 'downloaded_formatted' : 'uploaded_formatted'];
                     }
                     return val;
                 }

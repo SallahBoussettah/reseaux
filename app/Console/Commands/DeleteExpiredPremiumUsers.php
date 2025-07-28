@@ -16,7 +16,7 @@ use App\Models\Setting;
 class DeleteExpiredPremiumUsers extends Command
 {
     protected $signature = 'users:delete-expired';
-    protected $description = 'Remove users from router configuration, mark them as deactivated, and update profile_type to expired in the database if scheduled deletion time has passed';
+    protected $description = 'Process users whose premium access has expired - remove from router and mark as expired in database';
 
     // MikroTik connection details from config
     protected $mikrotikConfig = [];
@@ -48,13 +48,25 @@ class DeleteExpiredPremiumUsers extends Command
     {
         $startTime = microtime(true);
         
-        // Find all users whose scheduled deletion time has passed
-        $expiredUsers = Client::whereNotNull('scheduled_deletion_at')
-                             ->where('scheduled_deletion_at', '<', Carbon::now())
+        // Clean up old scheduled_deletion_at values for active premium users
+        $cleanedUp = Client::where('profile_type', 'premium_user')
+                          ->where('status', 'active')
+                          ->whereNotNull('scheduled_deletion_at')
+                          ->update(['scheduled_deletion_at' => null]);
+        
+        if ($cleanedUp > 0) {
+            $this->info("Cleaned up $cleanedUp active premium users with old deletion schedules.");
+            Log::info("Cleaned up $cleanedUp active premium users with old deletion schedules.");
+        }
+        
+        // Find users whose premium has actually expired (not just scheduled for deletion)
+        $expiredUsers = Client::where('profile_type', 'premium_user')
+                             ->whereNotNull('premium_expires_at')
+                             ->where('premium_expires_at', '<', Carbon::now())
                              ->get();
 
-        $this->info('Found ' . $expiredUsers->count() . ' users scheduled for processing.');
-        Log::info('Found ' . $expiredUsers->count() . ' users scheduled for processing.');
+        $this->info('Found ' . $expiredUsers->count() . ' users with expired premium access.');
+        Log::info('Found ' . $expiredUsers->count() . ' users with expired premium access.');
         
         // Debug - print out user details
         foreach ($expiredUsers as $user) {
@@ -62,7 +74,7 @@ class DeleteExpiredPremiumUsers extends Command
             $this->info('  Status: ' . $user->status);
             $this->info('  Profile Type: ' . $user->profile_type);
             $this->info('  MAC Address: ' . ($user->mac_address ?? 'None'));
-            $this->info('  Scheduled Deletion: ' . $user->scheduled_deletion_at);
+            $this->info('  Premium Expires At: ' . ($user->premium_expires_at ?? 'None'));
         }
         
         if ($expiredUsers->count() === 0) {

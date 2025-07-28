@@ -22,7 +22,14 @@ class UpdateBandwidthUsage extends Command
      *
      * @var string
      */
-    protected $description = 'Update bandwidth usage data from MikroTik router';
+    protected $description = 'Update bandwidth usage data from MikroTik router using direct interface traffic monitoring';
+
+    /**
+     * MikroTik service instance
+     *
+     * @var MikroTikService
+     */
+    protected $mikrotikService;
 
     /**
      * Execute the console command.
@@ -44,10 +51,10 @@ class UpdateBandwidthUsage extends Command
             ]);
             
             // Create MikroTik service instance
-            $mikrotikService = new MikroTikService($mikrotikClient);
+            $this->mikrotikService = new MikroTikService($mikrotikClient);
             
             // Test connection to ensure it's working
-            if (!$mikrotikService->testConnection()) {
+            if (!$this->mikrotikService->testConnection()) {
                 $this->error("Cannot establish connection to MikroTik router");
                 Log::error("Cannot establish connection to MikroTik router during scheduled task");
                 return Command::FAILURE;
@@ -56,15 +63,15 @@ class UpdateBandwidthUsage extends Command
             $this->info('Connected to MikroTik router successfully');
             
             // Get active connections with bandwidth usage
-            $activeConnections = $mikrotikService->getActiveConnectionsWithBandwidth();
+            $activeConnections = $this->mikrotikService->getActiveConnectionsWithBandwidth();
             
             $this->info('Found ' . count($activeConnections) . ' active connections');
             
             // Update database with bandwidth usage
             $this->updateBandwidthUsageInDatabase($activeConnections);
             
-            // Get historical data from MikroTik's accounting
-            $accountingData = $mikrotikService->getAccountingData();
+            // Get historical data from MikroTik's accounting (optional, as we're now using direct traffic)
+            $accountingData = $this->mikrotikService->getAccountingData();
             $this->updateHistoricalBandwidthUsage($accountingData);
             
             $this->info('Bandwidth usage updated successfully');
@@ -82,7 +89,7 @@ class UpdateBandwidthUsage extends Command
     }
     
     /**
-     * Update database with bandwidth usage from active connections
+     * Update database with bandwidth usage using interface traffic allocation
      * 
      * @param array $activeConnections
      * @return void
@@ -90,52 +97,107 @@ class UpdateBandwidthUsage extends Command
     private function updateBandwidthUsageInDatabase($activeConnections)
     {
         try {
+            if (empty($activeConnections)) {
+                $this->info('No active connections to process');
+                return;
+            }
+
+            // Get interface traffic data for accurate total bandwidth
+            $interfaceTraffic = $this->mikrotikService->getInterfaceTraffic();
+            
+            if (empty($interfaceTraffic) || !isset($interfaceTraffic['rx-bits-per-second'])) {
+                $this->warn('No interface traffic data available, skipping bandwidth allocation');
+                return;
+            }
+
+            $totalInterfaceRx = $interfaceTraffic['rx-bits-per-second']; // Download from internet
+            $totalInterfaceTx = $interfaceTraffic['tx-bits-per-second']; // Upload to internet
+            
+            $this->info("Interface traffic: Download={$totalInterfaceRx} bps, Upload={$totalInterfaceTx} bps");
+
+            // Calculate total activity rates from all users (for proportional allocation)
+            $totalUserRxRate = 0;
+            $totalUserTxRate = 0;
+            $activeUserCount = 0;
+
             foreach ($activeConnections as $connection) {
-                // Skip if no MAC address or bytes data
-                if (!isset($connection['mac_address']) || 
-                    !isset($connection['bytes_in']) || 
-                    !isset($connection['bytes_out'])) {
+                if (isset($connection['rx_rate_raw']) && isset($connection['tx_rate_raw'])) {
+                    $totalUserRxRate += (int)$connection['rx_rate_raw'];
+                    $totalUserTxRate += (int)$connection['tx_rate_raw'];
+                    $activeUserCount++;
+                }
+            }
+
+            $this->info("Total user activity: RX={$totalUserRxRate} bps, TX={$totalUserTxRate} bps from {$activeUserCount} users");
+
+            // Calculate bytes transferred in the last minute (since this runs every minute)
+            // Interface traffic is in bits per second, so multiply by 60 seconds then divide by 8 for bytes
+            $intervalSeconds = 60; // Command runs every minute
+            $totalInterfaceRxBytes = ($totalInterfaceRx * $intervalSeconds) / 8;
+            $totalInterfaceTxBytes = ($totalInterfaceTx * $intervalSeconds) / 8;
+            
+            $this->info("Calculated bytes for last {$intervalSeconds} seconds: Download={$totalInterfaceRxBytes} bytes, Upload={$totalInterfaceTxBytes} bytes");
+
+            // If no user activity detected, distribute equally among active users
+            if ($totalUserRxRate == 0 && $totalUserTxRate == 0 && $activeUserCount > 0) {
+                $this->info('No individual user activity detected, distributing interface traffic equally');
+                $perUserRxBytes = $totalInterfaceRxBytes / $activeUserCount;
+                $perUserTxBytes = $totalInterfaceTxBytes / $activeUserCount;
+            }
+
+            // Process each active connection
+            foreach ($activeConnections as $connection) {
+                if (!isset($connection['mac_address'])) {
                     continue;
                 }
                 
                 $macAddress = $connection['mac_address'];
-                $bytesIn = (int)$connection['bytes_in'];
-                $bytesOut = (int)$connection['bytes_out'];
+                $userRxRate = isset($connection['rx_rate_raw']) ? (int)$connection['rx_rate_raw'] : 0;
+                $userTxRate = isset($connection['tx_rate_raw']) ? (int)$connection['tx_rate_raw'] : 0;
                 
                 // Find client by MAC address
                 $client = Client::where('mac_address', $macAddress)->first();
                 
-                if ($client) {
-                    // Store previous values for logging
+                if (!$client) {
+                    $this->warn("Client with MAC address {$macAddress} not found in database");
+                    continue;
+                }
+
+                // Calculate this user's proportional share of interface traffic
+                $allocatedRxBytes = 0;
+                $allocatedTxBytes = 0;
+
+                if ($totalUserRxRate > 0 && $totalUserTxRate > 0) {
+                    // Proportional allocation based on user activity
+                    $rxProportion = $userRxRate / $totalUserRxRate;
+                    $txProportion = $userTxRate / $totalUserTxRate;
+                    
+                    $allocatedRxBytes = $totalInterfaceRxBytes * $rxProportion;
+                    $allocatedTxBytes = $totalInterfaceTxBytes * $txProportion;
+                } else if (isset($perUserRxBytes) && isset($perUserTxBytes)) {
+                    // Equal distribution
+                    $allocatedRxBytes = $perUserRxBytes;
+                    $allocatedTxBytes = $perUserTxBytes;
+                }
+
+                // Only update if we have meaningful allocation
+                if ($allocatedRxBytes > 0 || $allocatedTxBytes > 0) {
                     $previousDownloaded = $client->total_downloaded_bytes;
                     $previousUploaded = $client->total_uploaded_bytes;
                     
-                    // Update client's bandwidth usage
-                    // We're using the bytes from the active session
-                    // We'll update the database only if the new values are higher than existing ones
-                    if ($bytesIn > 0 && $bytesIn > $client->total_downloaded_bytes) {
-                        $client->total_downloaded_bytes = $bytesIn;
-                    }
+                    // Add the allocated bytes to the user's total (cumulative)
+                    $client->total_downloaded_bytes += (int)$allocatedRxBytes;
+                    $client->total_uploaded_bytes += (int)$allocatedTxBytes;
                     
-                    if ($bytesOut > 0 && $bytesOut > $client->total_uploaded_bytes) {
-                        $client->total_uploaded_bytes = $bytesOut;
-                    }
+                    // Save changes
+                    $client->save();
                     
-                    // Save changes if there are any
-                    if ($client->isDirty()) {
-                        $client->save();
-                        
-                        $this->info("Updated bandwidth usage for client {$client->id} ({$client->mac_address}): " . 
-                                  "Downloaded: {$previousDownloaded} -> {$client->total_downloaded_bytes}, " .
-                                  "Uploaded: {$previousUploaded} -> {$client->total_uploaded_bytes}");
-                        
-                        Log::info("Updated bandwidth usage for client {$client->id} ({$client->mac_address}): " . 
-                                  "Downloaded: {$previousDownloaded} -> {$client->total_downloaded_bytes}, " .
-                                  "Uploaded: {$previousUploaded} -> {$client->total_uploaded_bytes}");
-                    }
-                } else {
-                    $this->warn("Client with MAC address {$macAddress} not found in database");
-                    Log::warning("Client with MAC address {$macAddress} not found in database");
+                    $this->info("Updated bandwidth for {$macAddress}: " . 
+                              "Downloaded: +{$allocatedRxBytes} bytes (total: {$client->total_downloaded_bytes}), " .
+                              "Uploaded: +{$allocatedTxBytes} bytes (total: {$client->total_uploaded_bytes})");
+                    
+                    Log::info("Allocated bandwidth to client {$client->id} ({$macAddress}): " . 
+                              "RX: +{$allocatedRxBytes} bytes, TX: +{$allocatedTxBytes} bytes");
                 }
             }
         } catch (\Exception $e) {
@@ -146,6 +208,8 @@ class UpdateBandwidthUsage extends Command
     
     /**
      * Update historical bandwidth usage from MikroTik accounting data
+     * Note: This method is kept for compatibility but accounting data may also be unreliable
+     * The main bandwidth tracking now uses direct interface traffic allocation
      * 
      * @param array $accountingData
      * @return void
@@ -153,53 +217,36 @@ class UpdateBandwidthUsage extends Command
     private function updateHistoricalBandwidthUsage($accountingData)
     {
         if (empty($accountingData)) {
-            $this->info('No accounting data available');
+            $this->info('No accounting data available - relying on interface traffic allocation');
             return;
         }
         
+        $this->info('Processing ' . count($accountingData) . ' accounting records (supplementary data)');
+        
         try {
             foreach ($accountingData as $record) {
-                // Skip if no MAC address or bytes data
-                if (!isset($record['mac-address']) || 
-                    !isset($record['bytes-in']) || 
-                    !isset($record['bytes-out'])) {
+                // Skip if no MAC address - we don't use bytes data from accounting anymore
+                if (!isset($record['mac-address'])) {
                     continue;
                 }
                 
                 $macAddress = $record['mac-address'];
-                $bytesIn = (int)$record['bytes-in'];
-                $bytesOut = (int)$record['bytes-out'];
                 
                 // Find client by MAC address
                 $client = Client::where('mac_address', $macAddress)->first();
                 
                 if ($client) {
-                    // Update client's bandwidth usage if the new values are higher
-                    if ($bytesIn > 0 && $bytesIn > $client->total_downloaded_bytes) {
-                        $client->total_downloaded_bytes = $bytesIn;
-                    }
-                    
-                    if ($bytesOut > 0 && $bytesOut > $client->total_uploaded_bytes) {
-                        $client->total_uploaded_bytes = $bytesOut;
-                    }
-                    
-                    // Save changes if there are any
-                    if ($client->isDirty()) {
-                        $client->save();
-                        
-                        $this->info("Updated historical bandwidth usage for client {$client->id} ({$client->mac_address}): " . 
-                                  "Downloaded: {$client->total_downloaded_bytes}, " .
-                                  "Uploaded: {$client->total_uploaded_bytes}");
-                        
-                        Log::info("Updated historical bandwidth usage for client {$client->id} ({$client->mac_address}): " . 
-                                  "Downloaded: {$client->total_downloaded_bytes}, " .
-                                  "Uploaded: {$client->total_uploaded_bytes}");
-                    }
+                    // Just log that we found the user in accounting data
+                    // The actual bandwidth allocation is done via interface traffic
+                    $this->info("Found client {$macAddress} in accounting data - bandwidth tracked via interface allocation");
+                    Log::debug("Client {$macAddress} found in accounting data");
+                } else {
+                    $this->warn("Client with MAC address {$macAddress} found in accounting but not in database");
                 }
             }
         } catch (\Exception $e) {
-            $this->error('Error updating historical bandwidth usage: ' . $e->getMessage());
-            Log::error('Error updating historical bandwidth usage: ' . $e->getMessage());
+            $this->error('Error processing historical bandwidth data: ' . $e->getMessage());
+            Log::error('Error processing historical bandwidth data: ' . $e->getMessage());
         }
     }
 }

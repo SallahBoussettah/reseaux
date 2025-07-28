@@ -64,6 +64,20 @@ class ClientController extends Controller
         if ($mac_address) {
             \Log::info("Checking access for MAC address: $mac_address");
 
+            // First check for expired users who should not get access
+            $expiredClient = Client::where('mac_address', $mac_address)
+                ->where(function($query) {
+                    $query->where('profile_type', 'expired')
+                          ->orWhere('status', 'deactivated');
+                })
+                ->first();
+                
+            if ($expiredClient) {
+                \Log::info("Found expired/deactivated user for MAC: $mac_address, showing registration form");
+                // Expired users must register again
+                return view('home');
+            }
+            
             // Check if this MAC address already has premium or active access
             $existingClient = Client::where('mac_address', $mac_address)
                 ->where('status', 'active')
@@ -665,7 +679,7 @@ class ClientController extends Controller
                     // Update both clients
                     $clientToUpdate->premium_expires_at = now()->addDays((int) \App\Models\Setting::get('email_premium_duration_days', 7));
                     $clientToUpdate->profile_type = 'premium_user';
-                    $clientToUpdate->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
+                    // No immediate deletion scheduling - user will be processed when premium expires
                     $clientToUpdate->save();
 
                     // Save the original client's updated verification count too
@@ -741,7 +755,7 @@ class ClientController extends Controller
             $client->remember_token = '';  // Clear the token to prevent reuse
             $client->premium_expires_at = now()->addDays((int) \App\Models\Setting::get('email_premium_duration_days', 7));
             $client->profile_type = 'premium_user'; // Set profile type to premium_user
-            $client->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
+            // No immediate deletion scheduling - user will be processed when premium expires
             $client->save();
             \Log::info('Client email marked as verified: ' . $client->email);
 
