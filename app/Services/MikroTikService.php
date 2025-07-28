@@ -128,7 +128,15 @@ class MikroTikService
     public function updateUserProfile($username, $profile)
     {
         try {
-            // Step 1: Get the user by username
+            // Step 1: Find and disconnect any active session for this user
+            $activeSession = $this->findActiveSessionByUser($username);
+            if ($activeSession) {
+                \Log::info("Found active session for user: $username. Disconnecting to refresh profile.");
+                $this->removeActiveSession($activeSession['.id']);
+                \Log::info("Successfully disconnected user: $username");
+            }
+            
+            // Step 2: Get the user by username
             $query = (new Query('/ip/hotspot/user/print'))
                 ->where('name', $username);
 
@@ -150,7 +158,7 @@ class MikroTikService
                 return true;
             }
             
-            // User exists, update their profile
+            // Step 3: User exists, update their profile
             $user = $response[0];
             
             $updateQuery = (new Query('/ip/hotspot/user/set'))
@@ -159,6 +167,46 @@ class MikroTikService
 
             $this->client->query($updateQuery)->read();
             \Log::info("Updated user profile in MikroTik: $username to profile: $profile");
+            
+            // Force a hotspot system refresh to clear any cached states
+            $this->refreshHotspotSystem();
+            
+            // Clear hotspot cache to ensure changes take effect immediately
+            try {
+                $clearCacheQuery = new Query('/ip/hotspot/host/print');
+                $hosts = $this->client->query($clearCacheQuery)->read();
+                
+                // Remove any cached host entries for this user
+                foreach ($hosts as $host) {
+                    if (isset($host['mac-address']) && $host['mac-address'] === $username) {
+                        $removeHostQuery = new Query('/ip/hotspot/host/remove');
+                        $removeHostQuery->equal('.id', $host['.id']);
+                        $this->client->query($removeHostQuery)->read();
+                        \Log::info("Cleared hotspot host cache for: $username");
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning("Could not clear hotspot cache: " . $e->getMessage());
+                // Don't fail the whole operation if cache clearing fails
+            }
+            
+            // Also try to refresh IP bindings
+            try {
+                $bindingsQuery = new Query('/ip/hotspot/ip-binding/print');
+                $bindings = $this->client->query($bindingsQuery)->read();
+                
+                // Remove any conflicting IP bindings for this MAC
+                foreach ($bindings as $binding) {
+                    if (isset($binding['mac-address']) && $binding['mac-address'] === $username) {
+                        $removeBindingQuery = new Query('/ip/hotspot/ip-binding/remove');
+                        $removeBindingQuery->equal('.id', $binding['.id']);
+                        $this->client->query($removeBindingQuery)->read();
+                        \Log::info("Cleared IP binding for: $username");
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning("Could not clear IP bindings: " . $e->getMessage());
+            }
             
             return true;
         } catch (\Exception $e) {
@@ -230,6 +278,38 @@ class MikroTikService
         } catch (\Exception $e) {
             \Log::error('Failed to find active session: ' . $e->getMessage());
             return null;
+        }
+    }
+    
+    // Force refresh hotspot system state
+    public function refreshHotspotSystem()
+    {
+        try {
+            \Log::info("Forcing hotspot system refresh");
+            
+            // Method 1: Clear all hotspot host cache
+            $clearHostsQuery = new Query('/ip/hotspot/host/remove');
+            $clearHostsQuery->equal('numbers', '0-999999');
+            try {
+                $this->client->query($clearHostsQuery)->read();
+                \Log::info("Cleared all hotspot host cache");
+            } catch (\Exception $e) {
+                \Log::warning("Could not clear all host cache: " . $e->getMessage());
+            }
+            
+            // Method 2: Refresh DHCP leases
+            try {
+                $refreshDhcpQuery = new Query('/ip/dhcp-server/lease/make-static');
+                $refreshDhcpQuery->equal('numbers', '');
+                $this->client->query($refreshDhcpQuery)->read();
+            } catch (\Exception $e) {
+                // This might fail, that's okay
+            }
+            
+            return true;
+        } catch (\Exception $e) {
+            \Log::error('Failed to refresh hotspot system: ' . $e->getMessage());
+            return false;
         }
     }
     

@@ -23,25 +23,91 @@ class ClientController extends Controller
         $this->mikroTikService = $mikroTikService;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-      
-        /*try {
-            $client = new RouterOSAPI([
-                'host' => '192.168.88.1',
-                'user' => 'api',
-                'pass' => 'admin',
-                'port' => 8728,
-                'timeout' => 30,
-            ]);
+        // Get the user's MAC address from the request
+        $mac_address = $request->input('mac');
 
-            $query = new Query('/ip/hotspot/active/print');
-            $users = $client->query($query)->read();
-            dd($users);
-        } catch (\Exception $e) {
-            dd($e);
-            return false; // Return false if there's an issue
-        }*/
+        // If no MAC address in URL, try to get it from other sources
+        if (!$mac_address) {
+            // Try to get from session (if user was here before)
+            $mac_address = session('mac_address');
+
+            // If still no MAC, try to find it from MikroTik active sessions by IP
+            if (!$mac_address) {
+                $user_ip = $request->ip();
+                \Log::info("No MAC address provided, trying to find it from MikroTik active sessions for IP: $user_ip");
+
+                try {
+                    $activeUsers = $this->mikroTikService->getActiveUsers();
+                    foreach ($activeUsers as $activeUser) {
+                        if (isset($activeUser['address']) && $activeUser['address'] === $user_ip) {
+                            $mac_address = $activeUser['mac-address'] ?? null;
+                            if ($mac_address) {
+                                \Log::info("Found MAC address from active session: $mac_address for IP: $user_ip");
+                                break;
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Log::error("Error getting active users from MikroTik: " . $e->getMessage());
+                }
+
+                // If still no MAC, use IP as fallback
+                if (!$mac_address) {
+                    \Log::info("Using IP as MAC fallback: $user_ip");
+                    $mac_address = 'IP_' . str_replace('.', '_', $user_ip);
+                }
+            }
+        }
+
+        if ($mac_address) {
+            \Log::info("Checking access for MAC address: $mac_address");
+
+            // Check if this MAC address already has premium or active access
+            $existingClient = Client::where('mac_address', $mac_address)
+                ->where('status', 'active')
+                ->whereIn('profile_type', ['premium_user', 'free_user'])
+                ->where(function ($query) {
+                    $query->whereNull('premium_expires_at')
+                        ->orWhere('premium_expires_at', '>', now());
+                })
+                ->first();
+
+            if ($existingClient && $existingClient->profile_type === 'premium_user') {
+                \Log::info("Found existing premium user for MAC: $mac_address, redirecting to internet");
+
+                // User already has premium access, redirect them to the internet
+                $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
+
+                // Try to authenticate them directly with MikroTik
+                try {
+                    // Check if user exists in MikroTik and has correct profile
+                    $mikroTikUser = $this->mikroTikService->getUserByUsername($mac_address);
+
+                    if ($mikroTikUser && $mikroTikUser['profile'] === 'premium_user') {
+                        \Log::info("User confirmed in MikroTik with premium profile, redirecting to destination");
+                        return redirect($original_destination);
+                    } else {
+                        \Log::warning("User not found in MikroTik or wrong profile, updating...");
+                        // Update the user profile in MikroTik
+                        $this->mikroTikService->updateUserProfile($mac_address, 'premium_user');
+                        return redirect($original_destination);
+                    }
+                } catch (\Exception $e) {
+                    \Log::error("Error checking MikroTik user: " . $e->getMessage());
+                    // Fall through to show registration form
+                }
+            } elseif ($existingClient && $existingClient->profile_type === 'free_user') {
+                \Log::info("Found existing free user for MAC: $mac_address, allowing limited access");
+
+                // User has free access, they can browse but with limitations
+                $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
+                return redirect($original_destination);
+            }
+        }
+
+        // No existing access found, show registration form
         return view('home');
     }
 
@@ -56,44 +122,44 @@ class ClientController extends Controller
     {
         // Check if there's an existing user with expired status
         $existingUser = Client::where('email', $email)
-                            ->where('profile_type', 'expired')
-                            ->where('status', 'deactivated')
-                            ->first();
-        
+            ->where('profile_type', 'expired')
+            ->where('status', 'deactivated')
+            ->first();
+
         if (!$existingUser) {
             return false;
         }
-        
+
         // Log that we found an expired user
         \Log::info('Found expired user with email: ' . $email . '. Initiating reactivation process.');
-        
+
         // Generate a new 6-digit verification token
         $verificationToken = mt_rand(100000, 999999);
-        
+
         // Set token expiration to 15 minutes from now
         $tokenExpiration = now()->addMinutes(15);
-        
+
         // Update the user with the new token
-        $existingUser->verification_token = (string)$verificationToken;
+        $existingUser->verification_token = (string) $verificationToken;
         $existingUser->verification_token_expires_at = $tokenExpiration;
         $existingUser->verification_token_attempts = 0;
-        
+
         // Update MAC address if it's different (user might be using a new device)
         if ($existingUser->mac_address !== $mac_address) {
             \Log::info('Updating MAC address for user: ' . $email . ' from ' . $existingUser->mac_address . ' to ' . $mac_address);
             $existingUser->mac_address = $mac_address;
         }
-        
+
         $existingUser->save();
-        
+
         // Send verification email with the new token
         $this->sendVerificationEmail($existingUser, $verificationToken);
-        
+
         \Log::info('Expired user reactivation initiated for: ' . $email . ' with new token');
-        
+
         return $existingUser;
     }
-    
+
     /**
      * Send a verification email to a user
      * 
@@ -105,11 +171,11 @@ class ClientController extends Controller
     {
         try {
             $verificationUrl = route('token.verification');
-            
+
             // Determine which email template to use based on the user's language
             $emailTemplate = 'emails.token_verification';
             $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
-            
+
             if ($user->language === 'fr') {
                 $emailTemplate = 'emails.token_verification_fr';
                 $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Aqua Mirage Marrakech - Votre code d\'accès WiFi');
@@ -117,10 +183,10 @@ class ClientController extends Controller
                 $emailTemplate = 'emails.token_verification_en';
                 $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
             }
-            
+
             // Get the logo URL from settings
             $logo_url = \App\Models\Setting::get('email_logo_url', '');
-            
+
             Mail::send($emailTemplate, [
                 'verificationToken' => $verificationToken,
                 'verificationUrl' => $verificationUrl,
@@ -129,13 +195,15 @@ class ClientController extends Controller
             ], function ($message) use ($user, $emailSubject) {
                 $message->to($user->email)
                     ->subject($emailSubject)
-                    ->from(config('mail.from.address', 'hotel@aquamiragemarrakech.com'), 
-                          config('mail.from.name', 'Aqua Mirage Marrakech'));
+                    ->from(
+                        config('mail.from.address', 'hotel@aquamiragemarrakech.com'),
+                        config('mail.from.name', 'Aqua Mirage Marrakech')
+                    );
             });
-            
+
             // Log successful email sending attempt
             \Log::info('Verification token sent to: ' . $user->email . ' with token: ' . $verificationToken . ' using template: ' . $emailTemplate);
-            
+
             return true;
         } catch (\Exception $e) {
             // Log email sending error
@@ -155,21 +223,21 @@ class ClientController extends Controller
 
         $mac_address = $request->input('mac');
         $validatedData['mac_address'] = $mac_address;
-        
+
         // First check if this is an expired user trying to get back in
         $reactivatedUser = $this->checkAndReactivateExpiredUser($validatedData['email'], $mac_address);
-        
+
         if ($reactivatedUser) {
             // User was found and reactivation process started
             $router_ip = '10.5.50.1';
-            
+
             // Store the verification token in the session as a backup
             session(['backup_token' => $reactivatedUser->verification_token]);
             session(['mac_address' => $mac_address]);
-            
+
             // Add a success message for the user
             session()->flash('status', 'We found your previous account. A verification code has been sent to your email. Please check your inbox to reactivate your account.');
-            
+
             // Add user to MikroTik hotspot with free profile
             try {
                 $this->mikroTikService->addHotspotUser($reactivatedUser->email, $mac_address, 'free_user');
@@ -178,27 +246,27 @@ class ClientController extends Controller
                 \Log::error('Failed to add user to MikroTik hotspot: ' . $e->getMessage());
                 // Continue anyway, as we'll verify later
             }
-            
+
             // Redirect to token verification page
             return redirect()->route('token.verification')->with([
                 'email' => $reactivatedUser->email,
                 'token_generated' => true,
                 'mac_address' => $mac_address,
                 'router_ip' => $router_ip,
-                'login_url' => 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address
+                'login_url' => 'http://' . $router_ip . '/login?username=' . $mac_address . '&password=123456789&mac=' . $mac_address
             ]);
         }
-        
+
         // If we get here, either the user is new or not expired, continue with normal registration
-        
+
         // Check if email already exists but is not expired
         $existingUser = Client::where('email', $validatedData['email'])
-                            ->where(function($query) {
-                                $query->where('profile_type', '!=', 'expired')
-                                      ->orWhere('status', '!=', 'deactivated');
-                            })
-                            ->first();
-                            
+            ->where(function ($query) {
+                $query->where('profile_type', '!=', 'expired')
+                    ->orWhere('status', '!=', 'deactivated');
+            })
+            ->first();
+
         if ($existingUser) {
             // Email already exists and user is not expired
             return redirect()->back()->withErrors(['email' => 'Email already registered. Please use a different email address.'])->withInput();
@@ -206,7 +274,7 @@ class ClientController extends Controller
 
         // Generate a 6-digit verification token
         $verificationToken = mt_rand(100000, 999999);
-        
+
         // Set token expiration to 15 minutes from now
         $tokenExpiration = now()->addMinutes(15);
 
@@ -219,7 +287,7 @@ class ClientController extends Controller
 
         // Initialize the Agent class
         $agent = new Agent();
-        
+
         // Detect device type
         $deviceType = 'unknown';
         if ($agent->isMobile()) {
@@ -235,7 +303,7 @@ class ClientController extends Controller
         } elseif ($agent->isTablet()) {
             $deviceType = 'Tablet';
         }
-        
+
         // Store device type
         $validatedData['device_type'] = $deviceType;
         $validatedData['platform'] = $agent->platform();
@@ -244,12 +312,12 @@ class ClientController extends Controller
 
         // Add verification token data
         $userData = array_merge($validatedData, [
-            'verification_token' => (string)$verificationToken, // Explicitly cast to string
+            'verification_token' => (string) $verificationToken, // Explicitly cast to string
             'verification_token_expires_at' => $tokenExpiration,
             'verification_token_attempts' => 0,
             'verified' => false
         ]);
-        
+
         // Log the data being saved
         \Log::info('Creating client with data:', [
             'verification_token' => $userData['verification_token'],
@@ -258,7 +326,7 @@ class ClientController extends Controller
 
         // Store the client in the database with the verification token
         $clients = Client::create($userData);
-        
+
         // Verify the token was saved
         $savedClient = Client::find($clients->id);
         \Log::info('Saved client verification data:', [
@@ -266,15 +334,15 @@ class ClientController extends Controller
             'verification_token' => $savedClient->verification_token,
             'expires_at' => $savedClient->verification_token_expires_at
         ]);
-        
+
         // Send verification email with token
         try {
             $verificationUrl = route('token.verification');
-            
+
             // Determine which email template to use based on the user's language
             $emailTemplate = 'emails.token_verification';
             $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
-            
+
             if ($validatedData['language'] === 'fr') {
                 $emailTemplate = 'emails.token_verification_fr';
                 $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Aqua Mirage Marrakech - Votre code d\'accès WiFi');
@@ -282,10 +350,10 @@ class ClientController extends Controller
                 $emailTemplate = 'emails.token_verification_en';
                 $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
             }
-            
+
             // Get the logo URL from settings
             $logo_url = \App\Models\Setting::get('email_logo_url', '');
-            
+
             Mail::send($emailTemplate, [
                 'verificationToken' => $verificationToken,
                 'verificationUrl' => $verificationUrl,
@@ -294,16 +362,18 @@ class ClientController extends Controller
             ], function ($message) use ($validatedData, $emailSubject) {
                 $message->to($validatedData['email'])
                     ->subject($emailSubject)
-                    ->from(config('mail.from.address', 'noreply@magichotels.ma'), 
-                          config('mail.from.name', 'Aqua Mirage Marrakech'));
+                    ->from(
+                        config('mail.from.address', 'noreply@magichotels.ma'),
+                        config('mail.from.name', 'Aqua Mirage Marrakech')
+                    );
             });
-            
+
             // Log successful email sending attempt
             \Log::info('Verification token sent to: ' . $validatedData['email'] . ' with token: ' . $verificationToken . ' using template: ' . $emailTemplate);
-            
+
             // Add a success message
             session()->flash('status', 'Verification code has been sent to your email. Please check your inbox.');
-            
+
         } catch (\Exception $e) {
             // Log email sending error
             \Log::error('Failed to send verification email: ' . $e->getMessage());
@@ -318,7 +388,7 @@ class ClientController extends Controller
             // Store the verification token in the session as a backup
             session(['backup_token' => $verificationToken]);
             session(['mac_address' => $mac_address]);
-            
+
             // Instead of redirecting to the router, redirect to token verification page
             // with information needed to manually connect
             return redirect()->route('token.verification')->with([
@@ -326,7 +396,7 @@ class ClientController extends Controller
                 'token_generated' => true,
                 'mac_address' => $mac_address,
                 'router_ip' => $router_ip,
-                'login_url' => 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address
+                'login_url' => 'http://' . $router_ip . '/login?username=' . $mac_address . '&password=123456789&mac=' . $mac_address
             ]);
 
         } catch (\Exception $e) {
@@ -334,8 +404,9 @@ class ClientController extends Controller
             return response()->json(['error' => 'There was an issue processing your request.'], 500);
         }
     }
-    
-    public function finale(){
+
+    public function finale()
+    {
         try {
             // Get active users using MikroTikService
             $active_users = $this->mikroTikService->getActiveUsers();
@@ -367,17 +438,17 @@ class ClientController extends Controller
             // If MAC address is not in session, redirect to WiFi page
             return redirect('/wifi');
         }
-        
+
         // Store the verification URL in session for later use
         session(['return_to_verification' => route('token.verification')]);
-        
+
         // Redirect to MikroTik login for free access
         $loginUrl = "http://10.5.50.1/login?username=$mac_address&password=123456789&mac=$mac_address";
-        
+
         // Add a success parameter to the URL that will be shown after login
         $successUrl = route('check.token');
         $loginUrl .= "&dst=" . urlencode($successUrl);
-        
+
         return redirect($loginUrl);
     }
 
@@ -391,11 +462,11 @@ class ClientController extends Controller
         $token = session('backup_token');
         $tokenRegistration = session('token_registration');
         $tempClientId = session('temp_client_id');
-        
+
         // Initialize client data
         $client = null;
         $tempClient = null;
-        
+
         // Check if we have a temporary client from token registration
         if ($tempClientId) {
             $tempClient = Client::find($tempClientId);
@@ -404,7 +475,7 @@ class ClientController extends Controller
                 $mac_address = $tempClient->mac_address;
             }
         }
-        
+
         // If we have an email, try to find the client
         if ($email) {
             $client = Client::where('email', $email)->first();
@@ -414,7 +485,7 @@ class ClientController extends Controller
             $token = request()->get('token');
             $client = Client::where('verification_token', $token)->first();
         }
-        
+
         // If coming from token registration and there's no client yet, show the token entry form
         if ($tokenRegistration && !$client) {
             $data = [
@@ -423,15 +494,15 @@ class ClientController extends Controller
                 'full_name' => $tokenRegistration['full_name'] ?? null,
                 'temp_client' => $tempClient,
             ];
-            
+
             return view('token_verification', $data);
         }
-        
+
         // If no email in session and no token registration, it means the user is coming directly to enter an existing code
         if (!$email && !$tokenRegistration && !$client) {
             return view('token_verification');
         }
-        
+
         $data = [
             'email' => $email,
             'mac_address' => $mac_address,
@@ -439,7 +510,7 @@ class ClientController extends Controller
             'router_ip' => $router_ip,
             'temp_client' => $tempClient
         ];
-        
+
         // Add client data if available
         if ($client) {
             $data['client'] = $client;
@@ -448,7 +519,7 @@ class ClientController extends Controller
             $data['successful_verifications'] = $client->successful_verifications ?? 0;
             $data['devices_remaining'] = 5 - ($client->successful_verifications ?? 0);
         }
-        
+
         return view('token_verification', $data);
     }
 
@@ -461,7 +532,7 @@ class ClientController extends Controller
         $token = $request->input('token');
         $backupToken = session('backup_token');
         $tempClientId = session('temp_client_id'); // Get temp client ID from session
-        
+
         // Log the token received and the request details
         \Log::info('Token verification request received', [
             'token' => $token,
@@ -474,17 +545,17 @@ class ClientController extends Controller
         try {
             // Find the client by the token
             $client = Client::where('verification_token', $token)
-                            ->where('verification_token_expires_at', '>=', now())
-                            ->first();
+                ->where('verification_token_expires_at', '>=', now())
+                ->first();
 
             // If not found by token in database, check if it matches the backup token in session
             if (!$client && $backupToken && $token == $backupToken) {
                 // Try to find the most recent client without a verification token
                 $client = Client::whereNull('verification_token')
-                               ->orWhere('verification_token', '')
-                               ->orderBy('created_at', 'desc')
-                               ->first();
-                               
+                    ->orWhere('verification_token', '')
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
                 if ($client) {
                     \Log::info('Client found using backup token in session: ' . $client->email);
                 }
@@ -514,76 +585,75 @@ class ClientController extends Controller
             // If we have token registration data in session and a temporary client
             $tokenRegistrationData = session('token_registration');
             $temporaryClient = null;
-            
+
             if ($tempClientId) {
                 $temporaryClient = Client::find($tempClientId);
             }
-            
+
             // Check if the token is correct
             if ($client->verification_token == $token) {
                 try {
                     // Determine which client record to update with premium access
                     $clientToUpdate = $temporaryClient ?: $client;
-                    
+
                     if ($temporaryClient) {
                         \Log::info('Using temporary client for upgrade: ' . $temporaryClient->email);
-                        
+
                         // Copy the verification token data from the original client to the temporary one
                         $temporaryClient->verification_token = $client->verification_token;
                         $temporaryClient->verification_token_expires_at = $client->verification_token_expires_at;
                     }
-                    
+
                     // Check if this is a reactivation of an expired user
                     $isReactivation = $clientToUpdate->profile_type === 'expired' && $clientToUpdate->status === 'deactivated';
-                    
+
                     if ($isReactivation) {
                         \Log::info('Reactivating expired user: ' . $clientToUpdate->email);
-                        
+
                         // Reactivate the user as a free user
                         $clientToUpdate->profile_type = 'free_user';
                         $clientToUpdate->status = 'active';
                         $clientToUpdate->email_verified_at = now();
                         $clientToUpdate->scheduled_deletion_at = null; // Clear the scheduled deletion
                         $clientToUpdate->verification_token_attempts = 0; // Reset attempts counter
-                        
+
                         // Update user profile in MikroTik
                         $this->mikroTikService->updateUserProfile($clientToUpdate->mac_address, 'free_user');
-                        
+
                         // Track successful verifications
                         $clientToUpdate->successful_verifications = ($clientToUpdate->successful_verifications ?? 0) + 1;
-                        
+
                         // Save the updates
                         $clientToUpdate->save();
-                        
+
                         \Log::info('Successfully reactivated user: ' . $clientToUpdate->email);
-                        
+
                         // Clear session data
                         session()->forget(['backup_token', 'temp_client_id', 'token_registration']);
-                        
-                        // Redirect to router with free user access
-                        $router_ip = session('router_ip') ?? '10.5.50.1';
-                        $mac_address = $clientToUpdate->mac_address;
-                        
-                        // Format the redirect URL correctly
-                        $redirect_url = 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address;
-                        $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
-                        
-                        \Log::info("Redirecting reactivated user to router: $redirect_url with destination: $original_destination");
-                        
-                        return redirect($redirect_url . '&dst=' . urlencode($original_destination));
+
+                        \Log::info('User successfully reactivated: ' . $clientToUpdate->email);
+
+                        // Since we disconnected the user to refresh their profile,
+                        // redirect to a success page that tells them to reconnect
+                        return redirect()->route('verification_success')->with([
+                            'message' => 'Account reactivated successfully!',
+                            'instructions' => 'Please disconnect and reconnect to WiFi, or refresh your browser to enjoy internet access.',
+                            'mac_address' => $clientToUpdate->mac_address,
+                            'profile' => 'free_user'
+                        ]);
                     }
-                    
+
                     // Regular verification flow for new or active users (existing code)
                     // Update user profile in MikroTik using the client to update (temp or original)
                     $this->mikroTikService->updateUserProfile($clientToUpdate->mac_address, 'premium_user');
-                    
+
                     // Mark the user as verified only if MikroTik update was successful
                     $clientToUpdate->email_verified_at = now();
-                    
+
                     // Track successful verifications on both clients
                     $clientToUpdate->successful_verifications = ($clientToUpdate->successful_verifications ?? 0) + 1;
                     $client->successful_verifications = ($client->successful_verifications ?? 0) + 1;
-                    
+
                     // Only clear the token if it's been used 5 times (from the original client)
                     if ($client->successful_verifications >= 5) {
                         $client->verification_token = null;
@@ -591,39 +661,33 @@ class ClientController extends Controller
                     } else {
                         \Log::info('Token used successfully ' . $client->successful_verifications . ' times for: ' . $client->email);
                     }
-                    
+
                     // Update both clients
-                    $clientToUpdate->premium_expires_at = now()->addDays((int)\App\Models\Setting::get('email_premium_duration_days', 7));
-                    $clientToUpdate->profile_type = 'premium_user'; 
+                    $clientToUpdate->premium_expires_at = now()->addDays((int) \App\Models\Setting::get('email_premium_duration_days', 7));
+                    $clientToUpdate->profile_type = 'premium_user';
                     $clientToUpdate->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
                     $clientToUpdate->save();
-                    
+
                     // Save the original client's updated verification count too
                     if ($client->id != $clientToUpdate->id) {
                         $client->save();
                     }
-                    
+
                     \Log::info('Client email marked as verified: ' . $clientToUpdate->email);
 
                     // Clear the backup token and temp client ID from session
                     session()->forget(['backup_token', 'temp_client_id', 'token_registration']);
 
-                    // Redirect to router with premium access
-                    $router_ip = session('router_ip') ?? '10.5.50.1';
-                    $mac_address = $clientToUpdate->mac_address;
-                    
-                    // Ensure MAC address has correct format for redirection
-                    if (strpos($mac_address, 'IP_') === 0) {
-                        \Log::warning("Using IP-based MAC address for redirection: $mac_address");
-                    }
-                    
-                    // Format the redirect URL correctly
-                    $redirect_url = 'http://' . $router_ip . '/login?username='.$mac_address.'&password=123456789&mac='.$mac_address;
-                    $original_destination = \App\Models\Setting::get('redirection_url', 'https://eureka-digital.ma');
-                    
-                    \Log::info("Redirecting to router: $redirect_url with destination: $original_destination");
-                    
-                    return redirect($redirect_url . '&dst=' . urlencode($original_destination));
+                    \Log::info('User successfully verified and upgraded to premium: ' . $clientToUpdate->email);
+
+                    // Since we disconnected the user to refresh their profile, 
+                    // redirect to a success page that tells them to reconnect
+                    return redirect()->route('verification_success')->with([
+                        'message' => 'Verification successful! You have been upgraded to premium access.',
+                        'instructions' => 'Please disconnect and reconnect to WiFi, or refresh your browser to enjoy premium internet access.',
+                        'mac_address' => $clientToUpdate->mac_address,
+                        'profile' => 'premium_user'
+                    ]);
                 } catch (\Exception $e) {
                     // If MikroTik update fails, don't clear the token so user can try again
                     \Log::error('MikroTik update failed: ' . $e->getMessage());
@@ -632,10 +696,10 @@ class ClientController extends Controller
             } else {
                 // If token doesn't match, increment attempts but keep the token
                 \Log::warning('Invalid token provided for client: ' . $client->email);
-                
+
                 // Save the updated attempts count
                 $client->save();
-                
+
                 $attemptsRemaining = 5 - $client->verification_token_attempts;
                 return redirect()->route('token.verification')
                     ->withErrors(['token' => "Invalid verification token. Please try again. You have $attemptsRemaining attempts remaining."])
@@ -675,7 +739,7 @@ class ClientController extends Controller
             // Mark the user as verified
             $client->email_verified_at = now();
             $client->remember_token = '';  // Clear the token to prevent reuse
-            $client->premium_expires_at = now()->addDays((int)\App\Models\Setting::get('email_premium_duration_days', 7));
+            $client->premium_expires_at = now()->addDays((int) \App\Models\Setting::get('email_premium_duration_days', 7));
             $client->profile_type = 'premium_user'; // Set profile type to premium_user
             $client->scheduled_deletion_at = now()->addMinute(); // Schedule deletion after 1 minute (for testing)
             $client->save();
@@ -694,7 +758,7 @@ class ClientController extends Controller
         }
     }
 
-    
+
     public function updateDataUsage(Request $request)
     {
         $validated = $request->validate([
@@ -709,10 +773,10 @@ class ClientController extends Controller
             // Use increment to avoid race conditions
             $client->increment('total_downloaded_bytes', $validated['bytes_in']);
             $client->increment('total_uploaded_bytes', $validated['bytes_out']);
-            
+
             // Log the update
             Log::info("Updated data usage for client {$client->id} with MAC {$validated['mac_address']}. Added {$validated['bytes_in']} downloaded bytes and {$validated['bytes_out']} uploaded bytes.");
-            
+
             return response()->json(['success' => true, 'message' => 'Data usage updated successfully']);
         }
 
@@ -728,20 +792,20 @@ class ClientController extends Controller
         $email = $request->input('email') ?? 'hotel@aquamiragemarrakech.com';
         $language = $request->input('language') ?? 'en';
         $token = mt_rand(100000, 999999); // Generate a 6-digit code instead of hex
-        
+
         try {
             // Determine which email template to use based on the selected language
             $emailTemplate = 'emails.token_verification_en';
             $emailSubject = \App\Models\Setting::get('email_verification_subject_en', 'Aqua Mirage Marrakech - Your WiFi Access Code');
-            
+
             if ($language === 'fr') {
                 $emailTemplate = 'emails.token_verification_fr';
                 $emailSubject = \App\Models\Setting::get('email_verification_subject_fr', 'Aqua Mirage Marrakech - Votre code d\'accès WiFi');
             }
-            
+
             // Create verification URL with token
             $verificationUrl = route('token.verification') . '?token=' . $token;
-            
+
             // Send the email using the appropriate template
             Mail::send($emailTemplate, [
                 'verificationToken' => $token,
@@ -750,10 +814,12 @@ class ClientController extends Controller
             ], function ($message) use ($email, $emailSubject) {
                 $message->to($email)
                     ->subject($emailSubject)
-                    ->from(config('mail.from.address', 'noreply@magichotels.ma'), 
-                          config('mail.from.name', 'Aqua Mirage Marrakech'));
+                    ->from(
+                        config('mail.from.address', 'noreply@magichotels.ma'),
+                        config('mail.from.name', 'Aqua Mirage Marrakech')
+                    );
             });
-            
+
             \Log::info('Test email sent to: ' . $email . ' using language: ' . $language);
             return response()->json(['success' => true, 'message' => 'Test email sent to ' . $email . ' using ' . ($language === 'fr' ? 'French' : 'English') . ' template']);
         } catch (\Exception $e) {
@@ -766,11 +832,11 @@ class ClientController extends Controller
     {
         // Log all request parameters for debugging
         \Log::info('Router redirected to check.token with params:', $request->all());
-        
+
         // Check for MAC address in router response
         $macAddress = null;
         $possibleMacParams = ['mac', 'client_mac', 'macaddr', 'mac-address', 'userMac'];
-        
+
         foreach ($possibleMacParams as $param) {
             if ($request->has($param) && !empty($request->input($param))) {
                 $macAddress = $request->input($param);
@@ -778,7 +844,7 @@ class ClientController extends Controller
                 break;
             }
         }
-        
+
         // If no MAC found in parameters, try to find it in the URL pattern
         if (!$macAddress) {
             $url = $request->fullUrl();
@@ -787,17 +853,17 @@ class ClientController extends Controller
                 \Log::info("Found MAC address in URL pattern: $macAddress");
             }
         }
-        
+
         // Check for token registration data in session
         $tokenRegistration = session('token_registration');
-        
+
         // If we have token registration data and a MAC address, create the client record
         if ($tokenRegistration && $macAddress) {
             \Log::info('Creating new client from token registration with MAC: ' . $macAddress);
-            
+
             // Generate a unique placeholder email to avoid duplicates
             $placeholderEmail = 'token_user_' . time() . '_' . uniqid() . '@placeholder.local';
-            
+
             // Create a temporary client record 
             $tempClient = new Client([
                 'full_name' => $tokenRegistration['full_name'],
@@ -811,66 +877,66 @@ class ClientController extends Controller
                 'verification_token_attempts' => 0,
                 'last_login_at' => now()
             ]);
-            
+
             $tempClient->save();
-            
+
             try {
                 // Add user to MikroTik hotspot with free profile (exactly like in the email registration flow)
                 $this->mikroTikService->addHotspotUser($tempClient->email, $macAddress, 'free_user');
-                
+
                 // Update session with client ID and MAC address
                 $tokenRegistration['client_id'] = $tempClient->id;
                 $tokenRegistration['mac_address'] = $macAddress;
                 $tokenRegistration['email'] = $placeholderEmail;
-                
+
                 session(['token_registration' => $tokenRegistration]);
                 session(['mac_address' => $macAddress]);
                 session(['temp_client_id' => $tempClient->id]);
                 session(['router_ip' => '10.5.50.1']);
-                
+
                 \Log::info('Successfully created free user for token verification: ' . $placeholderEmail);
-                
+
                 // Now redirect to token verification page to enter token
                 return redirect()->route('token.verification');
-                
+
             } catch (\Exception $e) {
                 \Log::error('Failed to create MikroTik user: ' . $e->getMessage());
                 // Continue with the flow but log the error
             }
         }
-        
+
         // Handle token checking for existing users or show redirect page
         if (!$request->has('token')) {
             $verificationUrl = session('return_to_verification') ?? route('token.verification');
             return view('redirect_to_verification', ['verificationUrl' => $verificationUrl]);
         }
-        
+
         // Rest of the existing code for token checking
         $token = $request->input('token');
-        
+
         if (!$token) {
             return response()->json([
                 'success' => false,
                 'message' => 'No token provided'
             ]);
         }
-        
+
         // Find the client by the token
         $client = Client::where('verification_token', $token)->first();
-        
+
         if (!$client) {
             return response()->json([
                 'success' => false,
                 'message' => 'Token not found in database'
             ]);
         }
-        
+
         // Check if token is expired
         $isExpired = $client->verification_token_expires_at < now();
-        
+
         // Check if maximum attempts reached
         $maxAttemptsReached = $client->verification_token_attempts >= 5;
-        
+
         return response()->json([
             'success' => true,
             'token_found' => true,
@@ -892,15 +958,15 @@ class ClientController extends Controller
         \Log::info('Token registration page request parameters:', $request->all());
         \Log::info('Token registration page full URL: ' . $request->fullUrl());
         \Log::info('Token registration page headers:', $request->headers->all());
-        
+
         // Use the comprehensive MAC address detection method
         $macAddress = $this->detectCurrentDeviceMacAddress($request);
-        
+
         // Store MAC address in session if found and it's not an IP-based MAC
         if (!empty($macAddress) && strpos($macAddress, 'IP_') !== 0) {
             session(['mac_address' => $macAddress]);
             \Log::info('Real MAC address stored in session for token registration: ' . $macAddress);
-            
+
             // Redirect with MAC parameter if it wasn't in the original request
             if (!$request->has('mac')) {
                 return redirect()->route('token.registration', ['mac' => $macAddress]);
@@ -908,7 +974,7 @@ class ClientController extends Controller
         } else {
             \Log::warning('No real MAC address found in token registration request, using: ' . $macAddress);
         }
-        
+
         return view('token_registration', ['mac_address' => $macAddress]);
     }
 
@@ -923,28 +989,28 @@ class ClientController extends Controller
 
         // Try to get MAC address from request first
         $macAddress = $request->input('mac');
-        
+
         // If MAC is empty or looks like an IP address, try to detect it using our comprehensive method
         if (empty($macAddress) || strpos($macAddress, 'IP_') === 0) {
             $detectedMac = $this->detectCurrentDeviceMacAddress($request);
-            
+
             // Only use the detected MAC if it's not an IP-based fallback
             if (!empty($detectedMac) && strpos($detectedMac, 'IP_') !== 0) {
                 $macAddress = $detectedMac;
                 \Log::info("Using detected MAC address: $macAddress");
             }
         }
-        
+
         // If still no MAC or still IP-based, use the client's IP address as fallback
         if (empty($macAddress) || strpos($macAddress, 'IP_') === 0) {
             $clientIp = $request->ip();
             $macAddress = 'IP_' . $clientIp;
             \Log::info('Using IP address as MAC address: ' . $macAddress);
         }
-        
+
         // Initialize the Agent class to detect device information
         $agent = new Agent();
-        
+
         // Detect device type
         $deviceType = 'unknown';
         if ($agent->isMobile()) {
@@ -966,10 +1032,10 @@ class ClientController extends Controller
         $language = explode(',', $acceptLanguage)[0];
         $language = explode(';', $language)[0];
         $language = substr($language, 0, 2); // Get the first two characters
-        
+
         // Generate a unique placeholder email to avoid duplicates
         $placeholderEmail = 'token_user_' . time() . '_' . uniqid() . '@placeholder.local';
-        
+
         // Create a temporary client record
         $tempClient = new Client([
             'full_name' => $validatedData['full_name'],
@@ -983,16 +1049,16 @@ class ClientController extends Controller
             'verification_token_attempts' => 0,
             'last_login_at' => now()
         ]);
-        
+
         $tempClient->save();
-        
+
         try {
             // Add user to MikroTik hotspot with free profile
             $this->mikroTikService->addHotspotUser($tempClient->email, $macAddress, 'free_user');
-            
+
             // Router info
             $router_ip = '10.5.50.1';
-            
+
             // Save user information in session for the verification step
             session([
                 'token_registration' => [
@@ -1007,22 +1073,22 @@ class ClientController extends Controller
                     'language' => $language
                 ]
             ]);
-            
+
             // Store MAC address and temp client ID in session
             session(['mac_address' => $macAddress]);
             session(['temp_client_id' => $tempClient->id]);
-            
+
             // Store router info in session
             session([
                 'router_ip' => $router_ip,
-                'login_url' => 'http://' . $router_ip . '/login?username='.$macAddress.'&password=123456789&mac='.$macAddress
+                'login_url' => 'http://' . $router_ip . '/login?username=' . $macAddress . '&password=123456789&mac=' . $macAddress
             ]);
-            
+
             \Log::info('Created free user for token verification: ' . $placeholderEmail . ' with MAC: ' . $macAddress);
-            
+
             // Directly redirect to token verification page
             return redirect()->route('token.verification');
-            
+
         } catch (\Exception $e) {
             \Log::error('MikroTik API Error during token registration: ' . $e->getMessage());
             return redirect()->back()->withErrors(['error' => 'There was an issue processing your request. Please try again.']);
@@ -1038,21 +1104,23 @@ class ClientController extends Controller
     {
         // Common parameter names used by MikroTik and other hotspot systems
         $macParams = ['mac', 'client_mac', 'macaddr', 'mac-address', 'userMac', 'mac_address'];
-        
+
         // Check URL parameters first (most common for hotspot redirects)
         foreach ($macParams as $param) {
             if ($request->has($param) && !empty($request->input($param))) {
                 $mac = $request->input($param);
                 // Basic MAC address format validation
-                if (preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $mac) || 
-                    preg_match('/^([0-9A-F]{2}){6}$/i', $mac)) {
+                if (
+                    preg_match('/^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$/i', $mac) ||
+                    preg_match('/^([0-9A-F]{2}){6}$/i', $mac)
+                ) {
                     // Log the found MAC address and source
                     \Log::info("MAC address found in request parameter '$param': $mac");
                     return strtoupper($mac); // Return normalized MAC
                 }
             }
         }
-        
+
         // MikroTik sometimes adds MAC address to the query string without parameter name
         // Check for patterns like ?00:11:22:33:44:55 in the URL
         $url = $request->fullUrl();
@@ -1062,7 +1130,7 @@ class ClientController extends Controller
             \Log::info("MAC address found in URL pattern: $mac");
             return strtoupper($mac);
         }
-        
+
         // Check for custom headers that might contain MAC address
         // MikroTik often uses custom headers
         $allHeaders = $request->headers->all();
@@ -1070,19 +1138,19 @@ class ClientController extends Controller
             if (is_array($headerValue)) {
                 $headerValue = implode(',', $headerValue);
             }
-            
+
             if (preg_match('/([0-9A-F]{2}[:-]){5}([0-9A-F]{2})/i', $headerValue, $matches)) {
                 $mac = $matches[0];
                 \Log::info("MAC address found in header '$headerName': $mac");
                 return strtoupper($mac);
             }
         }
-        
+
         // Check if the client IP is the same as the router's internal network
         // This is common when devices are directly connected to the router
         $clientIp = $request->ip();
         $routerNetworks = ['10.5.50.', '192.168.88.']; // Common MikroTik internal networks
-        
+
         foreach ($routerNetworks as $network) {
             if (strpos($clientIp, $network) === 0) {
                 // This is an internal IP, try to get MAC from ARP table
@@ -1091,7 +1159,7 @@ class ClientController extends Controller
                 return 'IP_' . $clientIp;
             }
         }
-        
+
         // If we still don't have a MAC, use the IP address with a prefix
         \Log::info("No MAC address found, using IP address: $clientIp");
         return 'IP_' . $clientIp;
