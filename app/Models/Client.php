@@ -18,6 +18,7 @@ class Client extends Authenticatable implements MustVerifyEmail
         'mac_address', 
         'device_type', 
         'platform', 
+        'browser',
         'premium_expires_at', 
         'status', 
         'profile_type',

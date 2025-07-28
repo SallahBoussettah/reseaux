@@ -387,6 +387,115 @@
         background-color: #F59E0B !important;
         color: white !important;
     }
+    
+    /* Browser Statistics Styles */
+    .browser-chart-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 250px;
+        padding: 20px;
+    }
+    
+    .browser-stats-list {
+        padding: 20px 0;
+    }
+    
+    .browser-stat-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--gray-100);
+        transition: background-color 0.2s ease;
+    }
+    
+    .browser-stat-item:last-child {
+        border-bottom: none;
+    }
+    
+    .browser-stat-item:hover {
+        background-color: var(--gray-50);
+        border-radius: 8px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+    
+    .browser-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .browser-indicator {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .browser-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--gray-700);
+    }
+    
+    .browser-stats {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .browser-value {
+        font-weight: 600;
+        color: var(--gray-800);
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        font-size: 14px;
+    }
+    
+    .browser-percentage {
+        font-size: 12px;
+        color: var(--gray-500);
+        font-weight: 500;
+        background-color: var(--gray-100);
+        padding: 4px 8px;
+        border-radius: 12px;
+        min-width: 50px;
+        text-align: center;
+    }
+    
+    /* Browser Chart Styles */
+    .browser-circular-progress {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    .browser-progress-svg {
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+    }
+
+    .browser-progress-segment {
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .browser-center-value {
+        font-size: 24px;
+        font-weight: 700;
+        fill: #374151;
+        font-family: inherit;
+    }
+
+    .browser-center-label {
+        font-size: 11px;
+        font-weight: 500;
+        fill: #6B7280;
+        font-family: inherit;
+    }
 </style>
 @endsection
 
@@ -660,6 +769,63 @@
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Browser Statistics Section -->
+<div class="geex-content__wrapper">
+    <div class="geex-content__section-wrapper mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <div class="d-flex align-items-center">
+                    <i class="uil uil-browser text-primary me-2" style="font-size: 1.25rem;"></i>
+                    <h5 class="mb-0">Statistiques des navigateurs</h5>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div id="browserChart" class="browser-chart-container"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="browser-stats-list">
+                            @if(isset($browserStats) && $browserStats && count($browserStats) > 0)
+                                @php $totalBrowserUsers = $browserStats->sum('total'); @endphp
+                                @foreach($browserStats as $browser)
+                                    @php 
+                                        $percentage = $totalBrowserUsers > 0 ? ($browser->total / $totalBrowserUsers) * 100 : 0;
+                                        $browserColor = match(strtolower($browser->browser)) {
+                                            'chrome' => '#4285F4',
+                                            'firefox' => '#FF7139',
+                                            'safari' => '#000000',
+                                            'edge' => '#0078D7',
+                                            'opera' => '#FF1B2D',
+                                            'internet explorer' => '#1EBBEE',
+                                            default => '#6366F1'
+                                        };
+                                    @endphp
+                                    <div class="browser-stat-item">
+                                        <div class="browser-info">
+                                            <div class="browser-indicator" style="background-color: {{ $browserColor }}"></div>
+                                            <span class="browser-name">{{ $browser->browser }}</span>
+                                        </div>
+                                        <div class="browser-stats">
+                                            <span class="browser-value">{{ $browser->total }}</span>
+                                            <span class="browser-percentage">{{ number_format($percentage, 1) }}%</span>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            @else
+                                <div class="text-center text-muted py-4">
+                                    <i class="uil uil-browser" style="font-size: 3rem; opacity: 0.3;"></i>
+                                    <p class="mt-2">Aucune donnée de navigateur disponible</p>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2039,6 +2205,132 @@ function updateBandwidthUsageInDatabase() {
 const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
 const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
     return new bootstrap.Tooltip(tooltipTriggerEl);
+    // Initialize browser chart
+    setTimeout(() => {
+        initializeBrowserChart();
+    }, 500);
 });
+
+// Browser Chart Initialization Function
+function initializeBrowserChart() {
+    const browserContainer = document.getElementById('browserChart');
+    if (!browserContainer) return;
+    
+    // Get browser data from PHP
+    const browserData = @json($browserStats ?? []);
+    
+    if (!browserData || browserData.length === 0) {
+        browserContainer.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="uil uil-browser" style="font-size: 3rem; opacity: 0.3;"></i>
+                <p class="mt-2">Aucune donnée de navigateur disponible</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Prepare data for chart
+    const labels = browserData.map(item => item.browser);
+    const values = browserData.map(item => item.total);
+    const total = values.reduce((sum, val) => sum + val, 0);
+    
+    // Browser-specific colors
+    const colors = labels.map(browser => {
+        switch(browser.toLowerCase()) {
+            case 'chrome': return '#4285F4';
+            case 'firefox': return '#FF7139';
+            case 'safari': return '#000000';
+            case 'edge': return '#0078D7';
+            case 'opera': return '#FF1B2D';
+            case 'internet explorer': return '#1EBBEE';
+            default: return '#6366F1';
+        }
+    });
+    
+    // Create custom circular progress chart
+    renderBrowserCircularChart(browserContainer, labels, values, colors, total);
+}
+
+function renderBrowserCircularChart(container, labels, values, colors, total) {
+    // Clear container
+    container.innerHTML = '';
+    
+    // Calculate percentages
+    const percentages = values.map(value => (value / total) * 100);
+    
+    // Create SVG
+    const svgSize = 200;
+    const center = svgSize / 2;
+    const radius = 70;
+    const strokeWidth = 18;
+    
+    let svg = `
+        <div class="browser-circular-progress">
+            <svg width="${svgSize}" height="${svgSize}" class="browser-progress-svg">
+                <circle 
+                    cx="${center}" 
+                    cy="${center}" 
+                    r="${radius}" 
+                    fill="none" 
+                    stroke="#f3f4f6" 
+                    stroke-width="${strokeWidth}"
+                    class="progress-bg"
+                />
+    `;
+    
+    // Add progress segments
+    const circumference = 2 * Math.PI * radius;
+    let currentOffset = 0;
+    
+    percentages.forEach((percentage, index) => {
+        const segmentLength = (percentage / 100) * circumference;
+        const dashArray = segmentLength + ' ' + circumference;
+        const dashOffset = -currentOffset;
+        
+        svg += `
+            <circle 
+                cx="${center}" 
+                cy="${center}" 
+                r="${radius}" 
+                fill="none" 
+                stroke="${colors[index]}" 
+                stroke-width="${strokeWidth}"
+                stroke-dasharray="${dashArray}"
+                stroke-dashoffset="${dashOffset}"
+                stroke-linecap="round"
+                class="browser-progress-segment"
+                data-browser="${labels[index]}"
+                data-value="${values[index]}"
+                data-percentage="${percentage.toFixed(1)}"
+                style="transform: rotate(-90deg); transform-origin: ${center}px ${center}px; transition: all 0.3s ease;"
+            />
+        `;
+        currentOffset += segmentLength;
+    });
+    
+    // Add center text
+    svg += `
+                <text x="${center}" y="${center - 5}" text-anchor="middle" class="browser-center-value">${total}</text>
+                <text x="${center}" y="${center + 15}" text-anchor="middle" class="browser-center-label">Navigateurs</text>
+            </svg>
+        </div>
+    `;
+    
+    container.innerHTML = svg;
+    
+    // Add hover effects
+    const segments = container.querySelectorAll('.browser-progress-segment');
+    segments.forEach(segment => {
+        segment.addEventListener('mouseenter', function() {
+            this.style.strokeWidth = (strokeWidth + 3) + 'px';
+            this.style.filter = 'brightness(1.1)';
+        });
+        
+        segment.addEventListener('mouseleave', function() {
+            this.style.strokeWidth = strokeWidth + 'px';
+            this.style.filter = 'brightness(1)';
+        });
+    });
+}
 </script>
 @endsection
