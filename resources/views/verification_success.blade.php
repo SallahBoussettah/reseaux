@@ -57,17 +57,20 @@
                 border-left: 4px solid #3B82F6;
             }
             .refresh-btn {
-                background: #10B981;
+                background: linear-gradient(135deg, #10B981, #059669);
                 color: white;
                 border: none;
                 padding: 12px 30px;
                 border-radius: 8px;
                 font-size: 1rem;
                 cursor: pointer;
-                transition: background 0.3s;
+                transition: all 0.3s;
+                box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
             }
             .refresh-btn:hover {
-                background: #059669;
+                background: linear-gradient(135deg, #059669, #047857);
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
             }
             .auto-refresh {
                 margin-top: 20px;
@@ -104,18 +107,18 @@
                 </div>
             @endif
 
-            <button class="refresh-btn" onclick="window.location.reload()">
-                🔄 Refresh Page
+            <button class="refresh-btn" onclick="window.location.href='{{ \App\Models\Setting::get("redirection_url", "https://eureka-digital.ma") }}'">
+                🌐 Access Internet Now
             </button>
 
             <div class="auto-refresh">
-                <small>This page will automatically refresh in <span id="countdown">10</span> seconds</small>
+                <small>Redirecting to internet in <span id="countdown">3</span> seconds</small>
             </div>
         </div>
 
         <script>
-            // Auto refresh after 10 seconds
-            let countdown = 10;
+            // Auto redirect after 3 seconds
+            let countdown = 3;
             const countdownElement = document.getElementById('countdown');
             
             const timer = setInterval(() => {
@@ -124,7 +127,8 @@
                 
                 if (countdown <= 0) {
                     clearInterval(timer);
-                    window.location.reload();
+                    // Redirect to the custom redirection URL
+                    window.location.href = '{{ \App\Models\Setting::get("redirection_url", "https://eureka-digital.ma") }}';
                 }
             }, 1000);
         </script>
